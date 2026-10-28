@@ -1,14 +1,15 @@
 # Engrisk — Product Flow (nguồn sự thật về chức năng & hành vi)
 
-> Bộ ba tài liệu thiết kế phải được đọc cùng nhau:
+> Bộ tài liệu thiết kế phải được đọc cùng nhau:
 >
 > | Tài liệu | Vai trò |
 > |---|---|
 > | `apps/ux_preview/product_flow.md` (tài liệu này) | Hành vi sản phẩm, hành trình, màn hình, quy tắc thi, AI, RBAC, roadmap |
-> | `apps/ux_preview/ux-preview.html` | Prototype tương tác (Web + Mobile) — mở trực tiếp bằng trình duyệt |
+> | `apps/ux_preview/ux-preview.html` (+ `styles/*.css`, `scripts/*.js`) | Prototype tương tác (Web + Mobile, VI/EN, 5 theme preset) — mở trực tiếp bằng trình duyệt, không cần build |
+> | `apps/ux_preview/ux_spec.md` | Quy tắc đặt component, feature flow F1–F14, behavior chuẩn, khung mở rộng, journey map, heuristic review, kế hoạch usability test |
 > | `backend/docs_design/schema.dbml` | Mô hình dữ liệu PostgreSQL (33 bảng, 6 domain) |
 >
-> Trạng thái: **đề xuất thiết kế để product review**, chưa phải cam kết triển khai. Nhãn giai đoạn `P1`…`P4` dùng thống nhất trong cả ba file.
+> Trạng thái: **đề xuất thiết kế để product review**, chưa phải cam kết triển khai. Nhãn giai đoạn `P1`…`P4` dùng thống nhất trong mọi file.
 
 ---
 
@@ -476,20 +477,25 @@ Mã màn hình = `id` trong registry `SCREENS` của `ux-preview.html`. Trạng 
 | **Một bảng `ai_runs`** | Provenance + trạng thái job + chi phí/hạn mức trong một chỗ; không có hệ thống `ai_questions` song song | Không lưu prompt thô — debug dựa vào log có thời hạn |
 | **Prototype HTML thuần** | Review nhanh, không build; tái tạo token HeroUI v3 thật (`variables.css`) và tên class BEM (`button--primary`, `chip--success`) | Không phải component React thật; animation/ARIA của React Aria chỉ được mô phỏng |
 
-### Engrisk Theme trên HeroUI (nguồn & mức độ gần đúng)
-Bộ theme và component chuẩn được trình bày trong prototype tại màn `design-system` (nút **Theme & Components** trên thanh công cụ): token màu, typography, radius/shadow/spacing, icon, component HeroUI, pattern riêng của Engrisk và bảng ánh xạ Web ↔ Native.
-- **Đã đối chiếu thực tế:**
-  - Token lấy từ `heroui-inc/heroui@v3/packages/styles/themes/default/variables.css` và thang radius từ `shared/theme.css`. Accent giữ màu xanh mặc định của HeroUI. Màu trung tính được pha một chút sắc độ (chroma 0.0015) theo hue 253.83 của accent, giống cơ chế “Base” trong Theme Builder.
-  - Các màu dẫn xuất (`*-hover`, `*-soft`, `separator-*`) dùng đúng công thức `color-mix` của HeroUI cho cả light và dark, nên tenant branding chỉ cần override `--accent`.
-  - Kích thước và biến thể của button, chip (soft/primary/tertiary), card, tabs, input (không viền, `shadow-field`, biến thể secondary trong card), checkbox, radio, switch, progress-bar, meter, alert, modal, toast, list-box-item lấy theo `packages/styles/components/*.css`.
-  - Bố cục app shell (sidebar trong suốt 256px, navbar 64px, KPI card, card `rounded-2xl`, tiêu đề section đặt ngoài card) theo template Dashboard của HeroUI Pro; số đo được lấy trực tiếp từ trang Theme Builder.
-  - Font Inter là mặc định của HeroUI Theme Builder. Icon Gravity UI là bộ icon dùng trong tài liệu HeroUI, nhúng trực tiếp từ Iconify.
-  - Danh mục component HeroUI Native (BottomSheet, ListGroup, Dialog, Toast, ControlField…) được dùng để ánh xạ sang mobile.
-- **Gần đúng / phụ thuộc mạng:**
-  - Inter tải từ Google Fonts. Khi offline, prototype dùng font hệ thống.
-  - Hành vi React Aria (focus management, typeahead) chỉ được mô phỏng bằng HTML và JS thuần.
-  - ProgressCircle và biểu đồ là SVG tự vẽ, dùng chung token.
-  - Animation được rút gọn và tôn trọng `prefers-reduced-motion`.
+### Engrisk Theme trên HeroUI (nguồn sự thật: HeroUI Theme Builder)
+Bộ theme và component chuẩn được trình bày trong prototype tại màn `design-system` (nút **Theme & Components** trên thanh công cụ): preset, token màu, swatch minh họa, typography, radius/shadow, motion, icon, linh vật, đa ngôn ngữ, component HeroUI, pattern riêng của Engrisk và bảng ánh xạ Web ↔ Native.
+- **Lấy nguyên văn từ https://heroui.com/en/themes:**
+  - 5 preset người học được chọn: **Default** (xanh dương, hue 253.83), **Sky** (225), **Lavender** (305), **Mint** (155), **Rabbit** (cam đào, 36.66). Giá trị là file `globals.css` export từ Theme Builder, chỉ đổi selector thành `[data-palette="…"]` × `[data-theme="dark"]` (`styles/tokens.css`). Các preset mang tên thương hiệu (Netflix, Uber, Spotify, Coinbase, Airbnb, Discord) bị loại vì là nhãn hiệu của bên khác.
+  - Font Inter, Radius “Medium” (0.5rem), Radius form “Large” (0.75rem) — mặc định của Theme Builder.
+  - Màu minh họa (linh vật Pip, tint kỹ năng, avatar) chỉ dùng 16 swatch accent của Theme Builder (`--sw-*`), không dùng làm màu chữ.
+- **Lấy từ `@heroui/styles`:** shadow (`variables.css`), công thức màu dẫn xuất (`*-hover`, `*-soft`, `separator-*`), easing (`shared/theme.css`), kích thước/biến thể component (`components/*.css`). Màu dẫn xuất được khai báo lại trên `.app` nên tenant chỉ cần override `--accent`.
+- **Không chỉnh token để đạt AA** (bản trước giảm L của accent/muted; đã bỏ vì yêu cầu “mọi giá trị theo HeroUI”). Tương phản đo được (sRGB, công thức WCAG 2.x):
+
+  | Preset | accent-foreground / accent | accent-soft-foreground / background |
+  |---|---|---|
+  | Default | 3.59:1 | 5.60:1 |
+  | Sky | 10.25:1 | 3.39:1 |
+  | Lavender | 9.10:1 | 3.72:1 |
+  | Mint | 11.76:1 | 3.00:1 |
+  | Rabbit | 5.94:1 | 5.18:1 |
+
+  Rủi ro đã biết (giữ nguyên giá trị HeroUI, không tự chỉnh): (1) Default — chữ 14px trên nút primary chỉ đạt mức chữ lớn; (2) Sky/Lavender/Mint — chữ `--accent-soft-foreground` (chip accent, link nhấn, tiêu đề alert accent) 3.0–3.7:1, dưới AA cho chữ thường; (3) `--muted` trên `--background` 4.42:1. Prototype hiện dùng đúng component HeroUI nên các điểm này xuất hiện nguyên trạng; đề xuất cho bản production nằm ở `ux_spec.md` §13.3 và câu hỏi M-11.
+- **Gần đúng / phụ thuộc mạng:** Inter tải từ Google Fonts (offline → font hệ thống); hành vi React Aria (focus, typeahead) mô phỏng bằng JS thuần; ProgressCircle/biểu đồ là SVG dùng chung token; linh vật là SVG inline vẽ tay.
 
 ---
 
@@ -506,9 +512,12 @@ Bộ theme và component chuẩn được trình bày trong prototype tại màn
 8. **IELTS Listening trong P1** phụ thuộc năng lực sản xuất audio có bản quyền.
 9. **Nguồn nội dung & bản quyền:** tự biên soạn hay mua license; ảnh hưởng `origin = imported` và quy trình duyệt.
 10. **Chia sẻ tài liệu người học cho tổ chức:** có cho phép không, với điều kiện quyền sử dụng nào?
+11. **Preset mặc định:** Default (xanh HeroUI) có chữ trên nút 3.59:1 — chỉ đạt AA cho chữ lớn. Ở cả 5 preset, `--muted` trên `--background` là 4.42–4.44:1 (dưới 4.5), trên `--surface` 4.81:1 (đạt). Giữ Default nguyên văn HeroUI, hay đặt Rabbit (accent đạt AA cả hai cặp) làm mặc định?
+12. **Thứ tự ra mắt ngôn ngữ** sau VI/EN (prototype liệt kê ja, ko, zh, th, id, es là “Sắp có”) và ai dịch giải thích đáp án (người hay AI + duyệt)?
 
 ### Giả định đang dùng
-- Giao diện mặc định tiếng Việt, nội dung đề tiếng Anh; locale `vi-VN`, múi giờ `Asia/Ho_Chi_Minh`.
+- Giao diện mặc định tiếng Việt; nếu ngôn ngữ trình duyệt là ngôn ngữ đã hỗ trợ khác, hiện banner đề xuất (không tự đổi). Lựa chọn lưu ở `users.locale` (khách: trên thiết bị), URL có tiền tố `/{locale}`. Nội dung đề luôn tiếng Anh; giải thích theo locale. Múi giờ theo thiết bị, mặc định `Asia/Ho_Chi_Minh`.
+- Theme preset + chế độ Sáng/Tối/Theo hệ thống lưu ở `users.preferences.theme = {palette, mode}`; trong tenant có branding, `--accent` của tenant ghi đè preset của người học.
 - Mock được phép tạm thoát nhưng đồng hồ vẫn chạy; không có “tạm dừng” trong mock.
 - Listening mock: người học tự bấm phát (không autoplay), mỗi audio 1 lần.
 - Không có streak; nhắc học tối đa 1 lần/ngày, tắt được.
