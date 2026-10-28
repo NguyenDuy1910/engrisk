@@ -34,7 +34,7 @@
 .card--press{cursor:pointer;text-align:left;border:0;font:inherit;color:inherit;transition:transform 300ms var(--ease-out-quart),box-shadow 300ms var(--ease-out-quart),background-color 150ms}
 @media (hover:hover){.card--press:hover{transform:translateY(-2px);box-shadow:var(--overlay-shadow)}}
 .card--press:active{transform:scale(.99)}
-.card__header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.card__header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.card__header > .shrink-0{min-height:24px}
 .card__title{font-size:16px;line-height:24px;font-weight:500;color:var(--foreground)}.card__title--sm{font-size:14px;line-height:20px}
 .card__description{font-size:14px;line-height:20px;color:var(--muted)}
 .card__content{display:flex;flex-direction:column;gap:4px;flex:1}.card__footer{display:flex;align-items:center;gap:8px}

@@ -171,7 +171,8 @@ function settingsPopover(){
     ${E.mode==='practice'?`<span class="text-xs font-semibold text-muted">${T('Hỗ trợ luyện tập','Practice aids')}</span>
       <label class="row row--between text-sm">${T('Kiểm tra đáp án từng trang','Check answers per page')}${switchEl(E.tools.instant,'tInstant',T('Kiểm tra ngay','Instant check'))}</label>
       <label class="row row--between text-sm">${T('Nghe lại & đổi tốc độ','Replay & speed')}${switchEl(E.tools.replay,'tReplay',T('Nghe lại','Replay'))}</label>
-      <label class="row row--between text-sm">${T('Transcript sau khi kiểm tra','Transcript after checking')}${switchEl(E.tools.transcript,'tTranscript','Transcript')}</label>`:''}</div></div>`;
+      <label class="row row--between text-sm">${T('Transcript sau khi kiểm tra','Transcript after checking')}${switchEl(E.tools.transcript,'tTranscript','Transcript')}</label>`:''}
+    ${isM()?'':`<span class="text-xs font-semibold text-muted">${T('Phím tắt','Shortcuts')}</span><div class="shortcut-list"><span>${kbd('A')}–${kbd('D')}</span>${T('Chọn đáp án','Choose answer')}<span>${kbd('←')}${kbd('→')}</span>${E.layout==='ielts'?T('Câu trước / sau','Prev / next question'):T('Trang trước / sau','Prev / next page')}<span>${kbd('F')}</span>${T('Đánh dấu','Flag')}${E.mode==='practice'?`<span>${kbd('Space')}</span>${T('Phát / dừng audio','Play / pause audio')}`:''}</div>`}</div></div>`;
 }
 function notesPanel(){
   const E=S.exam;

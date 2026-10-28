@@ -25,7 +25,7 @@
 | L5 | **Vùng ngón cái trên mobile** | CTA chính, điều hướng câu hỏi, nộp bài nằm ở **1/3 dưới màn hình** (sticky bar hoặc tab bar). Hành động phá hủy không đặt ở vùng ngón cái mặc định. | Thao tác một tay. |
 | L6 | **Đọc bên trái, làm bên phải (Web)** | Màn có tài liệu nguồn (passage, đề Writing): tài liệu cột trái, câu hỏi/editor cột phải, điều hướng cột phải ngoài cùng. | Theo hướng đọc F-pattern; không phải cuộn qua lại. |
 | L7 | **Tiết lộ dần (progressive disclosure)** | Transcript, giải thích dài, đề Writing trên mobile, cue card khi ghi âm → `Disclosure`/`Accordion`. Chỉ mở mặc định khi là nội dung chính. | Giữ màn tập trung. |
-| L8 | **Tiêu đề section ngoài card** | `Hoạt động gần đây 6` đặt ngoài card; card chỉ chứa nội dung. Không lồng card quá 2 cấp. | Nhịp thị giác HeroUI Pro, scan nhanh. |
+| L8 | **Một quy tắc tiêu đề** | Khối 1 card (list, bảng, biểu đồ) → tiêu đề + count nằm trong card (`cardHead`). Nhóm nhiều card (grid đề, tile Part) → section title ngoài grid. Card cạnh nhau cùng hàng cao bằng nhau. Không lồng card quá 2 cấp; không subtitle/gợi ý lặp lại điều đã thấy. | Ít khung, scan nhanh, mép thẳng. |
 | L9 | **Trạng thái tại chỗ** | Lỗi field ngay dưới field; lỗi tải dữ liệu thay chỗ nội dung; thông báo hệ thống bằng `Toast`. Không dùng modal cho thông báo. | Gần nguồn lỗi (Nielsen N9). |
 | L10 | **Cùng nội dung, khác cách đặt** | Web và Mobile dùng chung thứ tự ưu tiên nội dung, khác container: Modal ↔ BottomSheet, Table ↔ ListGroup, Split view ↔ Tabs. | Một mental model, hai thiết bị. |
 
@@ -35,29 +35,38 @@
 WEB (≥1024px)                                         MOBILE (HeroUI Native)
 ┌──────────┬───────────────────────────────────────┐  ┌──────────────────────────┐
 │ SIDEBAR  │ NAVBAR 64px                           │  │ STATUS BAR               │
-│ 256px    │ [Page title + subtitle]  [🔍][?][CTA] │  │ LARGE TITLE 30px  [🔔][👤]│
-│          ├───────────────────────────────────────┤  │ subtitle                 │
-│ Brand    │ Z1  KPI ROW (Stat × 4)                │  ├──────────────────────────┤
-│ Tenant ▾ │ Z2  PRIMARY (2/3)  │ Z3 SECONDARY(1/3)│  │ Z1 KPI 2×2               │
-│ Học tập  │     Resume card    │   Skill meters   │  │ Z2 Resume card           │
-│ Thư viện │     Recommendation │   Weekly rhythm  │  │ Z2 Recommendation        │
-│          │ Z4  SECTION TITLE + LIST/TABLE        │  │ Z3 Skills / Week         │
-│ Cài đặt  │                                       │  │ Z4 Recent list           │
-│ User ⋯   │                                       │  ├──────────────────────────┤
-└──────────┴───────────────────────────────────────┘  │ TAB BAR (5) · blur       │
-                                                       └──────────────────────────┘
+│ 256 / 72 │ [⇤][Page title + subtitle][🌐][🔔][CTA]│  │ Brand        [🌐][🔔]     │
+│          ├───────────────────────────────────────┤  │ LARGE TITLE 30px         │
+│ [E] Ws ⇕ │ Z1  KPI ROW (Stat × 4)                │  ├──────────────────────────┤
+│ 🔍 Tìm / │ Z2  PRIMARY (2/3)  │ Z3 SECONDARY(1/3)│  │ Z1 KPI 2×2               │
+│ Học tập  │     Plan + resume  │   Skill meters   │  │ Z2 Plan + resume         │
+│ Thư viện │     Recent list    │   Weekly rhythm  │  │ Z3 Skills / Week         │
+│          │ Z4  SECTION TITLE + LIST/TABLE        │  │ Z4 Recent list           │
+│ Goal card│                                       │  ├──────────────────────────┤
+│ User ⋯ ▴ │                                       │  │ TAB BAR (5) · blur       │
+└──────────┴───────────────────────────────────────┘  └──────────────────────────┘
 ```
 
 | Zone | Nội dung được phép | Component HeroUI | Quy tắc |
 |---|---|---|---|
-| Sidebar | Brand, tenant switcher, nav nhóm “Học tập/Thư viện”, cài đặt, user | `ListBox` item dạng nav, `Chip` phase | Tối đa 7 mục chính; mục tương lai có `phase` chip, không ẩn. |
-| Navbar | Tiêu đề trang (h1 20/28), subtitle, tìm kiếm, trợ giúp, **1 CTA “Luyện nhanh”** | `Button size=sm` | CTA toàn cục ẩn khi trang đã là nơi chọn bài (`catalog`). |
+| Sidebar | **Một** khối nhận diện = workspace switcher (logo tenant + tên + vai trò, menu đổi ngữ cảnh/lời mời/tổ chức), ô tìm kiếm duy nhất của app (`/`), nav “Học tập” + **nhóm thứ hai theo vai trò** (xem quy tắc dưới), thẻ “Lưu tiến độ” chỉ cho khách, user menu (tài khoản, giao diện, chế độ tối, ngôn ngữ, trợ giúp, đăng xuất). Thu gọn thành rail 72px (icon + tooltip) | `Dropdown`/`ListBox` item dạng nav, `Chip` phase / badge số | Không lặp brand + tenant; không có mục nav trùng đích với user menu; không lặp KPI của Home; tối đa 7 mục chính; mục tương lai có `phase` chip, không ẩn. |
+| Navbar | Nút thu gọn sidebar, tiêu đề trang (h1 20/28; Home thêm 1 dòng ngày + mục tiêu, các trang khác không subtitle), ngôn ngữ, thông báo (chấm đỏ khi có mục mới), **1 CTA “Luyện nhanh”** | `Button size=sm`, `Dropdown` | CTA toàn cục ẩn ở `catalog`. Tìm kiếm không đặt ở navbar (đã có ở sidebar). |
 | Z1 KPI | 2–4 chỉ số có ngữ cảnh (giá trị + đơn vị + xu hướng) | `Card` + `Chip trend` + `ProgressBar sm` | Mỗi KPI trả lời 1 câu hỏi; không KPI “cho đẹp”. |
 | Z2 Primary | Hành động tiếp theo (resume, gợi ý) | `Card lg` + `Button primary` | Tối đa 2 card; card đầu chứa primary CTA. |
 | Z3 Secondary | Thông tin hỗ trợ quyết định | `Card` + `Meter` | Không chứa primary CTA (chỉ `secondary`/`ghost`). |
-| Z4 Lists | Lịch sử, danh sách | `ListBox`/`Table` (Web), `ListGroup` (Mobile) | Section title ngoài card + count. |
+| Z4 Lists | Lịch sử, danh sách | `ListBox`/`Table` (Web), `ListGroup` (Mobile) | Tiêu đề + count nằm **trong** card (`cardHead`); hàng list thẳng mép với padding card. |
 | Tab bar (mobile) | 5 đích: Trang chủ, Luyện tập, AI Tutor, Tiến độ, Tôi | Native `Tabs`/bottom tabs | Không quá 5; tính năng mới vào “Tôi” trước. |
 | Sticky bar (mobile) | CTA chính của màn chi tiết (intro, writing) | `Button lg full` | Thay tab bar khi đang trong luồng nhiệm vụ. |
+
+**Quy tắc nav theo vai trò (sidebar Web):** nhóm “Học tập” (Trang chủ · Luyện đề · AI Tutor · Tiến độ) giống nhau cho mọi vai trò. Nhóm thứ hai:
+
+| Vai trò (permission) | Nhóm | Mục |
+|---|---|---|
+| Khách | Thư viện | Tài liệu của tôi (chip P3) — không có “Đóng góp đề” |
+| Học viên (`submission.create`) | Thư viện | Tài liệu của tôi · Đóng góp đề (`square-plus`) |
+| Giáo viên / Content admin (`content.author` hoặc `content.review*`) | **Nội dung** (thay “Thư viện”) | Content Studio (`layers`) · Kiểm duyệt (`shield-check`) + `Chip accent sm` = số bài chờ duyệt trong tenant hiện tại (ẩn khi 0) |
+
+Mục chỉ render khi có permission (không hiện mục khóa cho tính năng staff). Mobile: các mục này là hàng trong tab “Tôi”; tab “Tôi” được highlight khi đang ở `contribute`/`studio*`/`moderation`. Studio và Kiểm duyệt dùng container rộng 1360px (`page__inner--wide`).
 
 ### 1.2 Zone model — Chế độ tập trung (làm bài)
 
@@ -101,25 +110,35 @@ Quy tắc: ẩn toàn bộ navigation app; thoát luôn qua “Lưu & thoát” 
 |  | Dưới hero | 2 `Card` press TOEIC/IELTS → `catalog` | P1 | Grid 2 | 1 cột |
 | `auth` | Card trung tâm | `Tabs` Đăng nhập/Đăng ký, `Button tertiary` Google (trên cùng), `TextField secondary`, `Button primary full` | P0 | 460px giữa màn | Full-width, input 48px |
 | `onboarding` | Trung tâm | `ProgressBar sm` + “Bước n/4”, `RadioGroup` dạng choice tile, `Button` Tiếp tục (disabled tới khi chọn), `ghost` Bỏ qua (góc phải trên) | P0 | 460px | Tile ≥64px |
-| `home` | Z1 | 4 `Stat` | P1 | Grid 4 | Grid 2×2, chip xu hướng xuống dòng |
-|  | Z2 | Resume card → Recommendation card | P0 | 2/3 trái | Đầu trang |
-|  | Z3 | Skill meters + nút “Luyện”, nhịp tuần | P1 | 1/3 phải | Sau Z2 |
-|  | Z4 | Section “Hoạt động gần đây” + `ListBox` | P2 | Full width | Cuối |
+| `home` | Z1 | Hero “Kế hoạch hôm nay” (gộp resume) | P0 | Full width | Đầu trang |
+|  | Z2 | 3 `Stat` (điểm ước tính, phút tuần, chính xác 7 ngày) | P1 | Grid 3 | Grid 2 (bỏ chính xác) |
+|  | Z3 | Hoạt động gần đây \| Kỹ năng cần luyện (2 card cao bằng nhau) | P1 | Grid 2 | Xếp dọc |
 | `catalog` | Toolbar | `Tabs` kỳ thi, `SearchField`, `Tabs sm` loại bài, `ToggleButtonGroup` kỹ năng | P0 | 1 hàng + 1 hàng | Xếp dọc, tabs full |
-|  | Grid | Exam `Card` (icon tile, chip loại, title, desc 2 dòng, meta, footer CTA) | P0 | Grid 3 | 1 cột |
+|  | Grid | Test `Card` (**bìa** `examCover` + badge nguồn gốc, eyebrow kỳ thi, tên ngắn, meta, ★ + lượt làm, footer = 1 chip trạng thái + CTA); tile Part/dạng câu **có icon riêng**; bài ngắn trong 1 card list (thumbnail bìa compact) | P0 | Grid 3 / 4 | 1 cột / 2 cột |
+|  | Section phụ | “Từ Sunrise English” (chỉ tenant tổ chức, trên đề đầy đủ) · “Từ cộng đồng” (cuối; chip “Đã kiểm duyệt”, avatar tác giả, ★, giấy phép; `sectionTitle` + “Đóng góp đề”) | P1 | Grid 3 | 1 cột |
 | `exam-intro` | Trái | Card tổng quan + 3 thông số, cấu trúc, quy tắc | P0 | 2/3 | Xếp dọc |
 |  | Phải / Sticky | Card “Sẵn sàng?” + CTA | P0 | Sticky phải | Sticky bar dưới |
 | `exam` | Xem §1.2 | `RadioGroup` → QuestionOption, AudioPlayer, QuestionNavigator, ExamTimer, SaveStatus, `Modal`/`BottomSheet` nộp bài | P0 | Split + nav phải | Tabs passage/câu, sheet lưới câu |
-| `results` | Trái | Summary (ProgressCircle + score + loại điểm + alert ước tính), section stats, đáp án (`Tabs` lọc + list) | P0 | 2/3 | Summary → bước tiếp → chi tiết |
-|  | Phải | Bước tiếp theo (primary), skill meters, thẻ chuyển đổi khách | P0 | 1/3 | Ngay sau summary |
+| `results` | Trái | Summary (ProgressCircle + score + loại điểm + 1 dòng “ước tính”), bảng theo Part/dạng câu, đáp án (`Tabs` lọc + lưới) | P0 | 2/3 | Summary → bước tiếp → chi tiết |
+|  | Phải | Thẻ chuyển đổi khách, Bước tiếp theo (primary), câu tốn thời gian nhất | P0 | 1/3 | Ngay sau summary |
 | `review` | Hai cột | Passage có bằng chứng tô sáng / transcript ↔ câu hỏi + verified block + “Hỏi AI Tutor” | P0 | Câu độc lập: 1 cột 760px | Câu → bằng chứng → điều hướng |
 | `tutor` | Trái | Danh sách hội thoại | P2 | 248px | Ẩn (vào từ ngữ cảnh) |
 |  | Phải | Context card (verified) → chat → suggestion chips → composer | P0 | max 760px | Composer cuối |
 | `library` | Trái | Danh sách tài liệu + trạng thái + nháp AI | P0 | 2/3 | Sau dropzone |
 |  | Phải | Upload card (quyền sử dụng + checkbox + CTA disabled) | P0 | 1/3 | Đầu trang |
-| `progress` | Z1/Z2/Z4 | KPI, biểu đồ + `Tabs sm` khoảng thời gian, skill meters, `Table` lịch sử | P1 | Table | ListGroup |
-| `profile` | 2 cột | Header hồ sơ, mục tiêu, tổ chức, đăng nhập, cài đặt | P1 | 2 cột | 1 cột |
+| `progress` | Z1/Z2/Z4 | 4 KPI, biểu đồ + `Tabs sm` khoảng (Web) \| Kỹ năng (cao bằng nhau, 1 nút “Luyện yếu nhất”), `Table` lịch sử trong card | P1 | Table | ListGroup |
+| `profile` | 2 cột | Header hồ sơ, giao diện, ngôn ngữ (dropdown), mục tiêu, tổ chức, đăng nhập, cài đặt | P1 | 2 cột | 1 cột |
 | `org` | — | Banner P4, invitation card, context alert, nội dung tenant, branding | P4 | 2/3 + 1/3 | 1 cột |
+| `contribute` | Z1 | Hero: giá trị + số liệu thật + Pip (duy nhất) + `Button primary` “Bắt đầu đóng góp” | P0 | 2 cột (text \| Pip) | Pip nhỏ, CTA full-width |
+|  | Z2 | “Đóng góp của tôi”: card list, mỗi hàng bìa compact + pipeline 4 bước + hành động theo trạng thái; góp ý người duyệt (Alert warning) | P0 | 2/3 | Đầu trang sau hero |
+|  | Z3 | Chọn loại đóng góp (tile icon Part, Full mock khóa) · Nguyên tắc & chính sách (`Accordion`) · Hồ sơ ghi công | P1 | 1/3 + grid tile | Xếp dọc; tile soạn → “Tiếp tục trên máy tính” |
+| `studio` | Z1 | Banner phạm vi (Platform / Tenant) + `Button primary` Tạo đề mới + `secondary` Nhập gói đề | P0 | Full width | Banner gọn, ẩn nút nhập gói |
+|  | Z2 | 4 `Stat` · Việc cần làm (`cardHead` + list divided) | P0 | Grid 4 · card | Grid 2×2 · card |
+|  | Z4 | `Table` nội dung trong card (bìa · trạng thái · revision · hiển thị · quyền · chủ sở hữu · cập nhật · hoàn thiện · ⋯) + `Tabs sm` trạng thái + Search + `Select` | P0 | Table, cột cố định | ListGroup card |
+| `studio-editor` | Header | Card: bìa, tên, chip, trạng thái lưu, `secondary` Xem trước, `primary` theo vai trò (Xuất bản / Xuất bản cho lớp / Gửi duyệt) | P0 | Sticky đầu | Chỉ xem + Alert “Soạn trên máy tính” |
+|  | Body | `Tabs` 5 mục có badge lỗi: Tổng quan · Cấu trúc · Audio & Script (waveform timeline + QC card + script + cue) · Câu hỏi (3 cột) · Kiểm tra & xuất bản (checklist + diff + lịch) | P0 | Split theo tab | — |
+| `studio-import` | Trung tâm | Stepper 4 bước → mẫu tải về + cây ZIP + bảng cột · dropzone + quyền sử dụng · báo cáo kiểm tra (`Table` lỗi) · tạo nháp | P0 | 960px | Không hỗ trợ (xem trạng thái job) |
+| `moderation` | 3 cột | Hàng đợi (`Tabs` + list có SLA) · Chi tiết (`Tabs` Nội dung/Kiểm tra tự động/Lịch sử) · Quyết định sticky (checklist + 3 nút) | P0 | 360 \| flex \| 320 | List → chi tiết + thanh quyết định sticky đáy, checklist trong BottomSheet |
 
 ---
 
@@ -188,8 +207,7 @@ stateDiagram-v2
 | 2 | Gợi ý tiếp theo | luôn (fallback: bài 5 phút) | Bắt đầu (primary nếu không có khối 1, ngược lại secondary) |
 | 3 | KPI | ≥1 bài hoàn thành | — |
 | 4 | Kỹ năng cần luyện | ≥1 bài | Luyện (secondary) |
-| 5 | Nhịp tuần | đã đăng ký | — |
-| 6 | Hoạt động gần đây | ≥1 bài | Xem lịch sử (ghost) |
+| 5 | Hoạt động gần đây | ≥1 bài | Lịch sử (ghost) |
 
 - **Trạng thái:** loading = skeleton đúng hình khối (không spinner toàn trang); error = Alert + vẫn giữ “Luyện nhanh”; empty (người mới) = 1 card gợi ý lớn + 2 card trống có hành động.
 - **Scale:** Home là **feed khối có thứ tự ưu tiên** — tính năng mới (bài được giao P4, thử thách tuần, lớp học) thêm khối mới với hạng ưu tiên, không đổi layout. Tối đa 2 khối có primary CTA.
@@ -273,13 +291,35 @@ stateDiagram-v2
 
 ### F13. Tài khoản & ngữ cảnh tổ chức · P1/P4
 
-- Nhóm theo tần suất dùng: Mục tiêu → Tổ chức → Đăng nhập → Cài đặt → Đăng xuất → Xóa tài khoản (cuối, màu danger, AlertDialog).
-- Tenant switcher: sidebar (Web) và “Tôi” (Mobile); chuyển ngữ cảnh → toast xác nhận + theme đổi ngay.
+- Tenant switcher: workspace switcher đầu sidebar (Web) — menu liệt kê ngữ cảnh học, lời mời đang chờ và “Tổ chức của tôi”; Mobile: trong tab “Tôi”. Chuyển ngữ cảnh → toast xác nhận + theme đổi ngay.
 
 ### F14. Tổ chức & thương hiệu · P4
 
 - Lời mời: card trung tâm (logo, vai trò, cam kết quyền riêng tư) → Tham gia/Từ chối. Sau tham gia: alert ngữ cảnh + nội dung tenant + thư viện cấp phép.
 - Branding: tenant admin chỉ chọn `accent` + logo; toàn bộ component tự đổi qua token.
+
+### F15. Cộng đồng đóng góp đề · P3
+
+- **Mục tiêu:** học viên đã đăng ký đóng góp bộ luyện **gốc**, hiểu luật chơi trước khi soạn, theo dõi duyệt minh bạch; không gamification.
+- **Entry:** sidebar “Thư viện → Đóng góp đề”; nút “Đóng góp đề” ở section “Từ cộng đồng” (`catalog`); thông báo trạng thái. Khách → tạo tài khoản.
+- **Flow:** `contribute` (hero + chính sách) → chọn loại (Reading P5/P6/P7, Listening P1–4, IELTS passage; Full mock khóa) → `studio-editor` chế độ contributor (không có Hiển thị/Quyền truy cập; có Giấy phép) → Kiểm tra (0 lỗi chặn) → giấy phép + cam kết → **Gửi duyệt** → theo dõi pipeline Nháp → Gửi duyệt → Đang duyệt → Xuất bản; “Cần chỉnh sửa” → Sửa theo góp ý (thread neo câu) → gửi lại.
+- **Behavior:** Gửi duyệt disabled kèm lý do khi còn lỗi chặn/góp ý chưa xử lý; Rút lại = AlertDialog; xóa nháp có Hoàn tác; SLA hiển thị bằng ngày dự kiến (“trước 31/10”), không đếm ngược.
+- **Microcopy:** “Bộ đề của bạn giúp người học khác — được kiểm duyệt và ghi công.” · “Chỉ nội dung do bạn tự soạn. Không dùng đề thi thật hoặc đề nhớ lại.”
+- **Đo lường:** tỉ lệ nháp → gửi duyệt; tỉ lệ duyệt vòng 1; ★ trung bình đề cộng đồng (an toàn: số báo cáo vi phạm).
+- **Scale:** loại đóng góp mới = tile mới + mẫu cấu trúc; Full mock mở khóa sau 3 bộ đã xuất bản.
+- Chi tiết: `content_studio_spec.md` §11, §13.
+
+### F16. Content Studio & Kiểm duyệt · P3 (platform) / P4 (tenant)
+
+- **Mục tiêu:** content admin/giáo viên tạo, nhập, kiểm tra và xuất bản đề không cần kỹ sư; người duyệt xử lý hàng đợi đúng SLA.
+- **Entry:** sidebar nhóm “Nội dung” → `studio` / `moderation` (badge số chờ duyệt); todo trong Studio deep-link vào editor/moderation.
+- **Flow:** `studio` (phạm vi tenant, KPI, việc cần làm, bảng) → Tạo đề mới (mẫu cấu trúc) hoặc `studio-import` (4 bước) → `studio-editor` (Tổng quan · Cấu trúc · Audio & Script · Câu hỏi · Kiểm tra & xuất bản) → Xuất bản ngay / Lên lịch (admin) · Xuất bản cho lớp (giáo viên). `moderation`: hàng đợi → chi tiết → checklist → Duyệt & xuất bản / Yêu cầu chỉnh sửa / Từ chối.
+- **Component theo bước:** `Table` + `Tabs sm` lọc (studio) · `Tabs` có badge lỗi (editor) · waveform timeline + QC card + script rows (audio) · 3 cột navigator/editor/preview (câu hỏi) · checklist có “Sửa” deep-link (kiểm tra) · stepper + dropzone + `Table` lỗi (import) · 3 cột queue/detail/decision (moderation).
+- **Behavior:** autosave + trạng thái lưu; CTA chính disabled kèm lý do khi còn lỗi chặn; revision đã xuất bản chỉ đọc → “Tạo revision mới”; xuất bản là Modal tóm tắt (diff + tác động), từ chối là hành động có lý do bắt buộc; không ai duyệt bài của mình (mục khóa kèm giải thích).
+- **Không linh vật** trên mọi bề mặt Studio/Kiểm duyệt (công cụ làm việc); empty state dùng icon tile.
+- **Đo lường:** thời gian nháp → xuất bản; % gói nhập qua lần đầu; SLA duyệt đúng hạn (an toàn: số revision bị gỡ sau xuất bản).
+- **Scale:** loại câu hỏi mới = renderer + form trong registry `question_type`; kỳ thi mới = mẫu cấu trúc + cột manifest; tenant mới không cần màn mới.
+- Chi tiết: `content_studio_spec.md` §5–§10, §12–§16.
 
 ---
 
@@ -359,7 +399,7 @@ Không streak, không đếm ngược ngoài phòng thi, không “bạn sắp m
 | Results “Bước tiếp theo” | Danh sách gợi ý có hạng, render 1 | Giáo viên chấm lại |
 | Tutor context | Loại context card | Bài Writing, kế hoạch học |
 | “Tôi” (mobile) | List nhóm theo tần suất | Lớp học, hóa đơn |
-| Sidebar “Thư viện” | Nhóm mở rộng, có phase chip | Lớp học, báo cáo |
+| Sidebar “Thư viện” / “Nội dung” | Nhóm theo vai trò (§1.1), có phase chip / badge số | Lớp học, báo cáo, giao bài (P4) |
 
 ### 6.2 Gating tính năng (entitlement / phase)
 | Trạng thái | Hiển thị | Khi nào |
@@ -398,9 +438,15 @@ Engrisk
 │   │           └── Xem lại  (/attempts/:id/review/:n)
 │   ├── AI Tutor  (/tutor/:conversationId)
 │   └── Tiến độ  (/progress)
-├── Thư viện
+├── Thư viện  (học viên)
 │   ├── Tài liệu của tôi  (/library)  [P3]
+│   ├── Đóng góp đề  (/contribute)  [P3]
 │   └── Tổ chức  (/org/:slug)  [P4]
+├── Nội dung  (giáo viên · content admin — thay “Thư viện”)
+│   ├── Content Studio  (/studio)  [P3 platform · P4 tenant]
+│   │   ├── Trình soạn đề  (/studio/exams/:draftId)
+│   │   └── Nhập gói đề  (/studio/import)
+│   └── Kiểm duyệt  (/studio/review/:submissionId)  [P3]
 └── Tài khoản  (/account)
 ```
 
@@ -514,7 +560,7 @@ Critical 0 · Major 0 · Minor 6 · Cosmetic 1
 - [ ] Phím tắt bài thi + hành vi focus như F6.
 - [ ] Nhãn loại điểm theo `score_kind` (raw / scaled_estimate / ai_estimate); không có “official”.
 - [ ] Gating theo `tenant_entitlements` + `access_tier` đúng 4 trạng thái §6.2.
-- [ ] Analytics events cho các chỉ số ở F1–F14 (định nghĩa ở P1 sprint đầu).
+- [ ] Analytics events cho các chỉ số ở F1–F16 (định nghĩa ở P1 sprint đầu; sự kiện nội dung ở `content_studio_spec.md` §16).
 
 ---
 
@@ -551,7 +597,7 @@ flowchart LR
 ```
 
 - **Component:** `Dropdown` (Web) / `Menu` hoặc `BottomSheet` (Native), item `menuitemradio` gồm mã 2 chữ + tên bản ngữ + tên tiếng Anh; ngôn ngữ chưa có hiển thị disabled + chip “Sắp có” (không ẩn, để người học biết lộ trình). Ghi chú cuối menu: “Nội dung đề thi luôn bằng tiếng Anh”.
-- **Vị trí:** public nav (phải, trước Đăng nhập), footer landing (mở lên), khối “Học bằng ngôn ngữ của bạn” trên landing, navbar app (Web), header large-title (Mobile), Tài khoản → Ngôn ngữ, toolbar prototype.
+- **Vị trí:** public nav (phải, trước Đăng nhập), footer landing (mở lên), navbar app (Web), header large-title (Mobile), Tài khoản → Ngôn ngữ (chỉ dropdown, không lặp danh sách chip), toolbar prototype.
 - **Quy tắc nội dung:** không ghép chuỗi; chừa ≥30% độ dài; nút không cắt chữ (cho xuống dòng ở mobile); tên riêng kỳ thi (TOEIC, IELTS, Part 5) không dịch; xác nhận đổi ngôn ngữ bằng toast nói rõ đề thi vẫn tiếng Anh.
 - Prototype có đủ VI + EN; ja, ko, zh, th, id, es là “Sắp có”.
 
@@ -566,13 +612,13 @@ flowchart LR
 
 | Mood | Dùng ở | Không dùng |
 |---|---|---|
-| `wave` | Landing hero, auth (Web panel trái), hero card “Kế hoạch hôm nay”, empty state cần tài khoản, sidebar khách | — |
+| `wave` | Landing hero, auth (Web panel trái), hero card “Kế hoạch hôm nay”, empty state cần tài khoản, sidebar khách, hero `contribute` | Studio, trình soạn, nhập gói, kiểm duyệt |
 | `think` | Onboarding (bong bóng lời thoại), empty state không dữ liệu, đang chấm bài, xin quyền micro | — |
 | `happy` | Kết quả 40–59%, nhận xét Writing/Speaking, intro “Sẵn sàng chưa?”, bước 4 onboarding | — |
 | `cheer` | Kết quả ≥ 60% (kèm confetti 1 lần), CTA cuối landing | Kết quả thấp |
 | `calm` | Kết quả < 40% (động viên, không chê) | — |
 
-- Tối đa **1 Pip mỗi màn**; **không** xuất hiện trong màn làm bài (focus mode); Pip không bao giờ nói thay AI Tutor (AI có avatar + nhãn riêng).
+- Tối đa **1 Pip mỗi màn**; **không** xuất hiện trong màn làm bài (focus mode) và trên bề mặt làm việc của staff (`studio`, `studio-editor`, `studio-import`, `moderation` — empty state dùng icon tile); Pip không bao giờ nói thay AI Tutor (AI có avatar + nhãn riêng).
 - Thân/mỏ/chân/má = swatch Theme Builder; tai nghe = `--accent` → đổi theo preset/tenant. Animation: bob 3.4s, blink 5.2s, wave 1.6s; tắt khi reduced motion.
 
 ### 13.5 Motion tokens
@@ -596,8 +642,8 @@ Mỗi trang: **Mục tiêu → Bố cục Web / Mobile → Component chính → 
 
 #### `landing` — Landing / Khám phá (P1)
 - **Mục tiêu:** hiểu giá trị trong 5 giây; bắt đầu bài 5 phút trong 1 chạm.
-- **Web:** pub-nav trong suốt (blur) → banner gợi ý ngôn ngữ (nếu có) → Hero 2 cột (trái: chip “Mới”, H1 46px có dòng gradient, lead, 2 CTA `xl`, social proof AvatarGroup; phải: Pip `wave` 230px trên 3 blob mềm + 4 thẻ nổi minh họa sản phẩm: điểm ước tính, đáp án kiểm duyệt, AI Tutor, Part 3) → 3 thẻ kỳ thi → “Cách hoạt động” 3 bước (Pip 3 mood) → Bento tính năng (thẻ lớn có QuestionOption đúng/sai thật) → khối “Học bằng ngôn ngữ của bạn” → Testimonials → CTA band (Pip `cheer`) → footer có language picker.
-- **Mobile:** một cột; CTA full-width `lg`; hero art 300px dưới CTA; ẩn 2 thẻ nổi dưới; bento 1 cột.
+- **Web:** pub-nav trong suốt (blur) → banner gợi ý ngôn ngữ (nếu có) → Hero 2 cột (trái: chip “Mới”, H1 46px có dòng gradient, lead, 2 CTA `xl`, social proof AvatarGroup; phải: Pip `wave` 230px trên 3 blob mềm + 2 thẻ nổi: điểm ước tính, đáp án kiểm duyệt) → “Cách hoạt động” 3 bước (icon tile + “Bước n”, không thêm Pip) → Bento tính năng → CTA band (không Pip) → footer có language picker. Đã bỏ: hàng chọn kỳ thi (trùng CTA), khối ngôn ngữ (picker đã ở nav/footer), testimonials (nội dung minh họa không cần cho quyết định).
+- **Mobile:** một cột; CTA full-width `lg`; hero art 300px dưới CTA; bento 1 cột.
 - **Luồng:** Luyện thử 5 phút → `exam` (khách) · Chọn kỳ thi → `catalog` · Đăng nhập/Đăng ký → `auth` · Đổi ngôn ngữ → re-render tại chỗ.
 
 #### `auth` — Đăng nhập / Đăng ký (P1)
@@ -610,16 +656,16 @@ Mỗi trang: **Mục tiêu → Bố cục Web / Mobile → Component chính → 
 - **Luồng:** Kỳ thi → Trình độ → Mục tiêu (+ ngày thi) → Thời gian/ngày → `home` (toast “Đã lưu mục tiêu”).
 
 #### `home` — Dashboard (P1)
-- **Web:** greeting theo giờ + ngày (Intl) → **Hero “Kế hoạch hôm nay”** (eyebrow, 1 câu kế hoạch, chip thời lượng + lý do, CTA `lg`, Pip `wave` góc phải) → 4 KPI đếm lên → grid chính: Tiếp tục bài đang làm + Hoạt động gần đây | Kỹ năng cần luyện + Nhịp học tuần (bar chart 7 ngày, không streak).
-- **Mobile:** large title “Chào Minh” + language/avatar; hero card; KPI 2×2; các card xếp dọc; tab bar 5 mục (tab hiện tại có pill accent-soft + icon pop).
+- **Web:** greeting theo giờ + ngày (Intl) → **Hero “Kế hoạch hôm nay”** (eyebrow, 1 câu kế hoạch, chip thời lượng + lý do, thanh resume nếu có bài dở, CTA `lg`, Pip `wave` góc phải) → 3 KPI đếm lên → grid 2 cột bằng nhau: Hoạt động gần đây | Kỹ năng cần luyện. Không biểu đồ nhịp tuần (đã có KPI “Học tuần này”).
+- **Mobile:** large title “Chào Minh” + language/avatar; hero card (ẩn Pip khi có resume); KPI 2 cột; các card xếp dọc; tab bar 5 mục (tab hiện tại có pill accent-soft + icon pop).
 - **Người mới / khách:** hero “Bắt đầu với một bài 5 phút” (Pip `wave`) → sau bài đầu: hero gợi ý kỹ năng yếu nhất (Pip `happy`).
 
 #### `catalog` — Luyện đề (P1)
-- **Bố cục:** Tabs kỳ thi + Search → Tabs loại → thẻ “Tiếp tục” (nếu có bài dở) → **Đề thi thử đầy đủ** (grid 3 thẻ: section·phút, 200 câu, độ khó, “Đã làm 1× · tốt nhất 600”) → **Luyện theo Part** (7 tile có độ chính xác của bạn) hoặc **Dạng câu hỏi** IELTS (8 tile) → **Bài ngắn** → CTA tài liệu.
+- **Bố cục:** Tabs kỳ thi + Search → Tabs loại (Tất cả · Đề đầy đủ · Theo Part/Dạng câu hỏi · Bài ngắn · Cộng đồng) → thẻ “Tiếp tục” (nếu có bài dở) → [**Từ Sunrise English** — chỉ tenant tổ chức] → **Đề thi thử đầy đủ** (grid 3 thẻ: **bìa** + badge Engrisk Original, eyebrow kỳ thi, tên ngắn, meta, ★ + lượt làm, footer = 1 chip trạng thái + CTA) → **Luyện theo Part** (7 tile có icon riêng; % = độ chính xác của bạn, thanh + % cùng hàng) hoặc **Dạng câu hỏi** IELTS (8 tile có icon) → **Bài luyện ngắn** (1 card danh sách, thumbnail bìa) → **Từ cộng đồng** (chip “Đã kiểm duyệt”, avatar tác giả, ★, giấy phép; nút “Đóng góp đề”). Không upsell cuối trang.
 - **Luồng:** đề/tile → `exam-intro`; bài ngắn → `exam` ngay. Chi tiết `exam_practice_spec.md` §3.
 
 #### `exam-intro` — Thiết lập bài làm (P1)
-- **Web:** trái: header đề + cấu trúc theo section → Chọn cách làm (Thi thử / Luyện tập) → Chọn phần + Thời gian & hỗ trợ (luyện tập) hoặc Quy tắc phòng thi (thi thử) → Kiểm tra âm thanh → Lịch sử đề; phải: **Tóm tắt sticky** + CTA + Pip `happy`. **Mobile:** CTA sticky đáy. Chi tiết §4.
+- **Web:** trái: header đề + cấu trúc theo section → Chọn cách làm (Thi thử / Luyện tập, mô tả 1 dòng) → Chọn phần (cột cố định: tag · tên · độ chính xác · chip “Yếu nhất”) + Thời gian & hỗ trợ (chỉ tiêu đề) hoặc Quy tắc phòng thi (thi thử) → Kiểm tra âm thanh → Lịch sử đề (ẩn khi trống); phải: **Tóm tắt sticky** + CTA (không Pip). **Mobile:** CTA sticky đáy. Chi tiết §4.
 
 #### `exam` — Phòng thi (P1)
 - **Không linh vật, không entrance animation lặp** — chỉ motion phản hồi: `optPop` khi chọn, `reveal`/`shake` khi kiểm tra, waveform sống, timer pulse ≤ 5′.
@@ -630,8 +676,8 @@ Mỗi trang: **Mục tiêu → Bố cục Web / Mobile → Component chính → 
 - Writing: như F9; trạng thái chấm có Pip `think`; nhận xét có ring band + Pip `happy`. Speaking: như F10; xin quyền có Pip `think`; nút mic lớn có 2 vòng sóng lan; nhận xét có Pip `happy`.
 
 #### `results` — Kết quả (P1)
-- **Hero kết quả:** chip loại/lý do nộp/thời gian → tiêu đề cảm xúc theo % → ring % + điểm TOEIC (L/R) hoặc band IELTS (kèm quy đổi raw → /40) → Alert “ước tính” → Pip theo mood (chỉ Web). Confetti chỉ khi ≥ 60%.
-- **Web:** trái: hero, bảng theo Part (TOEIC, có TB giây/câu) hoặc theo dạng câu (IELTS), phiếu trả lời/answer key có lọc; phải: chuyển đổi khách, **Làm lại câu sai**, câu tốn thời gian nhất. Chi tiết §11.
+- **Hero kết quả:** chip chế độ (+ “Hết giờ” nếu tự nộp) · tên đề · thời gian → tiêu đề cảm xúc theo % → ring % + điểm TOEIC (L/R) hoặc band IELTS (kèm quy đổi raw → /40) → 1 dòng ghi chú “ước tính” → Pip theo mood (chỉ Web). Confetti chỉ khi ≥ 60%.
+- **Web:** trái: hero, bảng theo Part (TOEIC) hoặc theo dạng câu (IELTS) với thanh chính xác thẳng cột, phiếu trả lời/answer key có lọc (tiêu đề nằm trong card); phải: chuyển đổi khách, **Bước tiếp theo** (Làm lại câu sai + Luyện kỹ năng yếu nhất), câu tốn thời gian nhất. Chi tiết §11.
 
 #### `review` — Xem lại (P1)
 - Theo nhóm câu: dải số câu → Web 2 cột (stimulus với bằng chứng + highlight/ghi chú của bạn, transcript | câu hỏi review + thời gian mỗi câu + Trước/Tiếp nhóm). Mobile: câu → stimulus → điều hướng. Switch “Chỉ câu sai”.
@@ -641,17 +687,26 @@ Mỗi trang: **Mục tiêu → Bố cục Web / Mobile → Component chính → 
 - Empty/khách: Pip `think`/`wave`. AI luôn có avatar đen + sparkle + chip “AI tạo · có thể sai”.
 
 #### `library` — Tài liệu & AI tạo câu hỏi (P3)
-- Web: trái danh sách tài liệu + nháp; phải dropzone (viền nét đứt, hover accent-soft) + quyền sử dụng. **Xóa có Hoàn tác** trong toast (thay vì hỏi xác nhận). “Duyệt tất cả” khi ≥ 2 nháp. Empty: Pip `think`.
+- Web: trái card “Đã tải lên” (trạng thái + nháp AI); phải dropzone (viền nét đứt, hover accent-soft) + quyền sử dụng. **Xóa có Hoàn tác** trong toast (thay vì hỏi xác nhận). “Duyệt tất cả” khi ≥ 2 nháp. Empty: Pip `think`.
 
 #### `progress` — Tiến độ (P1)
-- KPI đếm lên → biểu đồ (vùng gradient accent, đường vẽ dần, mục tiêu nét đứt success) | Kỹ năng → bảng lịch sử (icon kỹ năng ở cột Bài). Mobile: list thay bảng.
+- KPI đếm lên → biểu đồ (vùng gradient accent, đường vẽ dần, mục tiêu nét đứt success) | Kỹ năng (2 card cao bằng nhau; chỉ 1 nút “Luyện yếu nhất”, không nút trên từng dòng) → card lịch sử (icon kỹ năng ở cột Bài). Mobile: list thay bảng, ẩn Tabs khoảng thời gian.
 
 #### `profile` — Tài khoản, giao diện & ngôn ngữ (P1)
-- **Thứ tự:** header hồ sơ (avatar xl, chip vai trò/xác minh) → **Giao diện** (5 preset tile + Sáng/Tối/Hệ thống) → **Ngôn ngữ** (Dropdown + danh sách ngôn ngữ, chip “sắp có”) → Mục tiêu → Tổ chức → Đăng nhập → Cài đặt (nhắc học, tài liệu, trợ giúp, đăng xuất, xóa tài khoản).
+- **Thứ tự:** header hồ sơ (avatar xl, chip vai trò/xác minh) → **Giao diện** (5 preset tile + Sáng/Tối/Hệ thống) → **Ngôn ngữ** (chỉ Dropdown + ghi chú “Đề thi luôn bằng tiếng Anh”) → Mục tiêu → Tổ chức → Đăng nhập → Cài đặt (nhắc học, xóa tài khoản; **Mobile** thêm Tài liệu, Trợ giúp, Đăng xuất vì không có sidebar/user menu).
 - Web 2 cột: (Giao diện, Mục tiêu, Tổ chức) | (Ngôn ngữ, Đăng nhập, Cài đặt). Khách: chỉ thẻ tạo tài khoản (Pip `wave`) + Giao diện + Ngôn ngữ (khách vẫn chỉnh được, lưu trên thiết bị).
 
 #### `org` — Tổ chức (P4)
 - Lời mời: brand mark lớn theo accent tenant, cam kết quyền riêng tư → Tham gia/Từ chối. Sau tham gia: alert ngữ cảnh, nội dung tenant + thư viện cấp phép | Branding (3 swatch Theme Builder: Teal #008080, Indigo #2662D9, Purple #AD5CD6) + tính năng theo gói.
+
+#### `contribute` — Đóng góp đề (P3)
+- **Web:** hero 2 cột (giá trị + số liệu thật + CTA | Pip — linh vật duy nhất) → “Đóng góp của tôi” (pipeline trạng thái, góp ý) → chọn loại (tile icon Part) → nguyên tắc & chính sách (Accordion) + hồ sơ ghi công. **Mobile:** theo dõi, trả lời góp ý, gửi duyệt; soạn → “Tiếp tục trên máy tính”. Khách: hero + chính sách + CTA tạo tài khoản. Chi tiết `content_studio_spec.md` §11.
+
+#### `studio` · `studio-editor` · `studio-import` — Content Studio (P3/P4)
+- **Không Pip, không entrance animation lặp** (công cụ làm việc). Container 1360px. `studio`: banner phạm vi → KPI → việc cần làm → bảng (cột cố định, bìa compact). `studio-editor`: header sticky + 5 tab có badge lỗi. `studio-import`: stepper 4 bước. **Mobile:** studio = KPI + todo + card list; editor chỉ xem; import không hỗ trợ. Chi tiết `content_studio_spec.md` §5–§10, §14.
+
+#### `moderation` — Kiểm duyệt (P3)
+- **Web:** 3 cột: hàng đợi (Tabs Chờ duyệt · Cần sửa · Đã xử lý, nguồn, SLA, cờ) | chi tiết (Nội dung · Kiểm tra tự động · Lịch sử, góp ý neo câu + trường) | quyết định sticky (checklist 6 mục + Duyệt & xuất bản / Yêu cầu chỉnh sửa / Từ chối có lý do). **Mobile:** list → chi tiết + thanh quyết định sticky đáy. Không Pip. Chi tiết `content_studio_spec.md` §12.
 
 #### `design-system` — Theme & Components (review)
 - Mục lục: Nền tảng (Tổng quan, **Theme presets**, Màu, **Swatch minh họa**, Typography, Radius/Shadow, **Motion**, Icon) · Thương hiệu (**Linh vật Pip**, **Đa ngôn ngữ**) · Component · Engrisk patterns · Web ↔ Native.

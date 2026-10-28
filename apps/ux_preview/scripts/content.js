@@ -67,6 +67,27 @@ const EXAMS = {
     desc:['Bài luận 250+ từ. AI chấm ước tính theo 4 tiêu chí IELTS.','A 250+ word essay. AI gives an estimated band on the 4 IELTS criteria.']},
   'ielts-s-part2':{track:'ielts',title:['Speaking Part 2: Một nơi bạn thích','Speaking Part 2: A place you like'],kind:'practice_set',skill:'speaking',count:1,minutes:4,diff:3,tier:'registered',mode:'practice',screen:'speaking',phase:'P2',qids:[],
     desc:['1 phút chuẩn bị, nói 1–2 phút. Ghi âm và nhận nhận xét AI.','1 minute to prepare, speak for 1–2 minutes. Record and get AI feedback.']},
+  /* Community sets (published after review; credited, licensed). qids reuse the demo bank of the matching Part/type. */
+  'cm-p5-prepositions':{track:'toeic',layout:'toeic',title:['Part 5 · Giới từ chỉ thời gian','Part 5 · Time prepositions'],kind:'practice_set',skill:'reading',count:10,minutes:8,diff:2,tier:'guest',mode:'practice',qids:['t101','t102','t103','t104'],
+    origin:'community',author:'minh',rating:4.7,plays:1240,license:'CC BY 4.0',
+    desc:['in / on / at / by / until trong ngữ cảnh công sở. Có giải thích từng câu.','in / on / at / by / until in workplace contexts. Explanations for every item.']},
+  'cm-p6-memos':{track:'toeic',layout:'toeic',title:['Part 6 · Thông báo nội bộ','Part 6 · Internal memos'],kind:'practice_set',skill:'reading',count:8,minutes:8,diff:3,tier:'guest',mode:'practice',qids:['t131','t132','t133','t134'],
+    origin:'community',author:'lan',rating:4.8,plays:3105,license:'CC BY 4.0',
+    desc:['Điền từ và chèn câu trong thông báo, memo nội bộ.','Text completion and sentence insertion in internal memos.']},
+  'cm-p2-replies':{track:'toeic',layout:'toeic',title:['Part 2 · Phản hồi nhanh','Part 2 · Quick replies'],kind:'practice_set',skill:'listening',count:25,minutes:9,diff:2,tier:'guest',mode:'practice',qids:['t7','t8','t9'],
+    origin:'community',author:'kenji',rating:4.5,plays:860,license:'CC BY 4.0',
+    desc:['Câu hỏi Wh-, Yes/No và câu gián tiếp; giọng Anh, Mỹ, Úc.','Wh-, yes/no and indirect questions; British, American and Australian voices.']},
+  'cm-ielts-tfng':{track:'ielts',layout:'ielts',title:['TFNG: Ong trong thành phố','TFNG: Bees in the city'],kind:'practice_set',skill:'reading',count:12,minutes:15,diff:3,tier:'guest',mode:'practice',qids:['i1','i2','i3','i4'],
+    origin:'community',author:'tram',rating:4.6,plays:540,license:'CC BY 4.0',
+    desc:['True / False / Not Given trên một passage học thuật ngắn.','True / False / Not Given on a short academic passage.']},
+  /* Tenant (Sunrise English) content: members only, assigned by a teacher */
+  'sr-midterm':{track:'toeic',layout:'toeic',bank:'toeic01',title:['Kiểm tra giữa kỳ · TOEIC 550+','Mid-term mock · TOEIC 550+'],kind:'full_mock',skill:null,count:200,minutes:120,diff:3,tier:'registered',mode:'mock',
+    sections:[{key:'L',minutes:45,paced:true,parts:['P1','P2','P3','P4']},{key:'R',minutes:75,parts:['P5','P6','P7']}],
+    origin:'tenant',tenant:'sunrise',author:'hanh',assignedBy:'hanh',due:'2026-11-08',
+    desc:['Đề giữa kỳ lớp TOEIC 550+ (Sunrise English). Kết quả gửi cho giáo viên.','Mid-term mock for the TOEIC 550+ class (Sunrise English). Results are shared with your teacher.']},
+  'sr-hw-week6':{track:'toeic',layout:'toeic',title:['Bài tập tuần 6 · Part 5','Homework week 6 · Part 5'],kind:'practice_set',skill:'reading',count:15,minutes:12,diff:2,tier:'registered',mode:'practice',qids:['t101','t102','t103','t104'],
+    origin:'tenant',tenant:'sunrise',author:'hanh',assignedBy:'hanh',due:'2026-10-31',
+    desc:['Từ loại và giới từ — bài tập về nhà tuần 6.','Word forms and prepositions — week 6 homework.']},
 };
 /** Part keys of an exam (from sections, or derived from an explicit qid list) */
 const examParts = ex => ex.sections ? ex.sections.flatMap(s=>s.parts) : [...new Set((ex.qids||[]).map(id=>Q[id].part))];

@@ -16,9 +16,15 @@ Phase 1 runs as ONE logical product (the platform tenant). The model is multi-te
 1. identity_access   — global users, auth identities, sessions, RBAC
 2. tenancy           — tenants, memberships, entitlements, invitations
 3. assets_uploads    — files in object storage + learner source materials
-4. exam_content      — exam types, skills, question bank, exams, immutable revisions
-5. learning_records  — goals, attempts, responses, evaluations, scores, skill stats
-6. ai                — AI run provenance + AI tutor conversations
+4. exam_content      — exam types, skills, question bank, exams, immutable revisions,
+                       section audio + cues + scripts, credits
+5. content_workflow  — Content Studio import jobs, submissions, reviews, review comments (P3/P4)
+6. learning_records  — goals, attempts, responses, evaluations, scores, skill stats, ratings
+7. ai                — AI run provenance + AI tutor conversations
+
+41 tables (34 base + 7 for the content ecosystem: revision_audio_tracks, exam_credits,
+content_import_jobs, content_submissions, submission_reviews, review_comments, exam_ratings).
+Companion spec for the content ecosystem: apps/ux_preview/content_studio_spec.md.
 
 ## Tenant isolation strategy
 - **Global (no tenant_id):** users, auth_*, permissions, system roles, exam_types, skills.
@@ -135,6 +141,8 @@ Enum asset_purpose {
   source_material [note: 'Learner/teacher upload used for AI generation']
   learner_response [note: 'Speaking recordings']
   branding [note: 'Tenant logos']
+  exam_cover [note: 'Uploaded cover image for an exam card (optional; generated cover_style otherwise)']
+  import_package [note: 'ZIP package (manifest + audio + images) uploaded to Content Studio import']
 }
 
 Enum asset_status {
@@ -223,7 +231,8 @@ Enum exam_status {
 }
 
 Enum revision_status {
-  draft
+  draft [note: 'Only editable state (Content Studio)']
+  scheduled [note: 'Passed publish checklist; frozen; promoted to published at publish_at']
   published [note: 'Immutable']
   retired [note: 'No new attempts; history intact']
 }
@@ -232,6 +241,50 @@ Enum access_tier {
   guest [note: 'Playable without an account']
   registered
   premium [note: 'Requires entitlement (future monetization)']
+}
+
+Enum exam_provenance {
+  engrisk_original [note: 'Authored by the Engrisk content team (platform tenant only). Catalog badge "Engrisk Original"']
+  tenant_authored [note: 'Authored by an organization (teacher / tenant content team); tenant-visible']
+  community [note: 'Contributed by a learner, published by the platform after moderation; always credited']
+  licensed_partner [note: 'Original material licensed from a publisher partner under contract (P4)']
+}
+
+Enum submission_status {
+  draft [note: 'Contributor still editing; not visible to reviewers']
+  submitted [note: 'Frozen snapshot queued; auto-checks running/finished, no reviewer yet']
+  in_review [note: 'Assigned to a reviewer']
+  changes_requested [note: 'Back to contributor with anchored comments; resubmission = new round']
+  approved [note: 'Revision published (or scheduled). Terminal']
+  rejected [note: 'Terminal; reason_code mandatory. Appeal = new submission referencing this one']
+  withdrawn [note: 'Contributor withdrew before decision. Terminal']
+}
+
+Enum review_decision {
+  approve
+  request_changes
+  reject
+}
+
+Enum import_status {
+  uploaded [note: 'Package stored (content_assets.purpose = import_package), scan pending']
+  validating [note: 'Manifest parsing + per-row validation + asset matching']
+  validated [note: 'Report ready; user may create the draft — rows with errors are skipped, warnings kept']
+  failed [note: 'Package unreadable / malware / package-level errors; see errors']
+  completed [note: 'Draft exam + revision + questions created']
+}
+
+Enum credit_role {
+  author
+  narrator [note: 'Voice actor of listening audio']
+  editor
+  reviewer [note: 'Moderator who approved; shown only if they opt in']
+  translator [note: 'Vietnamese explanations']
+}
+
+Enum contribution_license {
+  platform_nonexclusive [note: 'Contributor keeps copyright; grants Engrisk a worldwide, non-exclusive, royalty-free licence to host, adapt (format/fix) and distribute; revocable for future distribution']
+  cc_by_4_0 [note: 'Creative Commons Attribution 4.0; attribution via exam_credits']
 }
 
 Enum attempt_mode {
@@ -282,6 +335,8 @@ Enum ai_purpose {
   speaking_evaluation
   transcription
   question_generation
+  audio_alignment [note: 'Forced alignment of section audio ↔ script → revision_audio_tracks.cues']
+  originality_check [note: 'Similarity / copyright fingerprint screening of submissions → content_submissions.auto_checks']
 }
 
 Enum ai_run_status {
@@ -421,6 +476,8 @@ Table roles {
 tables. Seeded P1: learner; content_manager (granted inside the PLATFORM tenant to the
 Engrisk content team, so platform content is authored like any tenant content);
 platform_admin, platform_support (platform scope). Seeded P4: teacher, tenant_admin.
+P3 adds submission.create to learner and content.import/content.review to content_manager;
+P4 teacher gets content.author, content.import, content.publish_tenant, content.review_tenant.
 Tenant-defined roles are a P4 extension (tenant_id set).
 '''
 }
@@ -431,7 +488,19 @@ Table permissions {
   scope role_scope [not null]
   description text
 
-  Note: '[P1] Permission catalog, seeded from code. Checked by FastAPI dependencies, never by role name.'
+  Note: '''
+[P1] Permission catalog, seeded from code. Checked by FastAPI dependencies, never by role name.
+Content ecosystem keys (all tenant scope; effective only in the session's active tenant):
+- content.author          create/edit drafts, upload audio/images, scripts (content_manager P1, teacher P4)
+- content.import          upload + validate import packages (content_import_jobs) (content_manager P3, teacher P4)
+- content.review          moderation queue of the platform tenant: community + internal submissions (content_manager P3)
+- content.publish         publish revisions with visibility public (platform tenant only) (content_manager P1)
+- content.publish_tenant  publish revisions with visibility tenant inside own organization (teacher P4)
+- content.review_tenant   review submissions targeting own organization (teacher/tenant_admin P4)
+- submission.create       learner creates community drafts + submits for review (learner P3)
+Service rules: nobody decides their own submission (submission_reviews.reviewer ≠ submitter);
+content.publish never implies bypassing review for community provenance.
+'''
 }
 
 Table role_permissions {
@@ -803,7 +872,10 @@ Table exams {
   access_tier access_tier [not null, default: 'registered']
   status exam_status [not null, default: 'draft']
   visibility content_visibility [not null, default: 'tenant']
-  owner_user_id uuid [note: 'Learner who owns a personal_practice exam']
+  owner_user_id uuid [note: 'Learner who owns a personal_practice exam; community contributor while the draft is private']
+  provenance exam_provenance [not null, note: 'Catalog trust label. Set at creation by the service from tenant kind + creator role; immutable after first publish']
+  cover_asset_id uuid [note: 'Optional uploaded cover (content_assets.purpose = exam_cover). NULL → generated cover from cover_style']
+  cover_style jsonb [not null, default: `'{}'::jsonb`, note: 'Generated cover motif: {"motif":"answer_sheet"|"waveform"|"text_lines"|"passage_headings", "tint":"listening"|"reading"|"mixed", "label":"04"}. Derived defaults from exam_type + kind + skill_focus; theme tokens resolve colours client-side']
   current_revision_id uuid [ref: - exam_revisions.id, note: 'Revision served to NEW attempts']
   created_by_user_id uuid [ref: > users.id]
   created_at timestamptz [not null, default: `now()`]
@@ -814,6 +886,7 @@ Table exams {
     (tenant_id, slug) [unique, name: 'uq_exams_tenant_slug']
     (tenant_id, status, exam_type_id, kind, skill_focus) [name: 'ix_exams_catalog']
     (tenant_id, owner_user_id) [name: 'ix_exams_owner', note: 'Partial: WHERE owner_user_id IS NOT NULL']
+    (tenant_id, provenance, status) [name: 'ix_exams_provenance', note: 'Catalog sections "Từ cộng đồng" / tenant section']
   }
 
   checks {
@@ -827,6 +900,11 @@ Table exams {
 "Practice set" and "full mock" are the same entity with a different kind — one attempt
 engine, one catalog. Stable slug/URL; content lives in exam_revisions.
 Visibility public is only allowed for the platform tenant (service rule).
+[P3] provenance drives the catalog trust badge; engrisk_original and community are only valid
+in the platform tenant, tenant_authored only in organizations (service rule). Community drafts
+live in the platform tenant as visibility = private + owner_user_id = contributor until a
+submission is approved (then visibility = public). Rating average/count shown in the catalog
+is aggregated from exam_ratings (cached in the read model, not stored here).
 '''
 }
 
@@ -841,13 +919,22 @@ Table exam_revisions {
   question_count integer [not null, default: 0, note: 'Snapshot at publish (immutable) for catalog listing']
   max_points numeric(7,2) [not null, default: 0, note: 'Snapshot at publish']
   scoring_policy_key text [not null, note: 'Copied from exam_types at publish; pins the scorer version']
+  release_notes text [note: 'Shown in Studio history + to learners as "Có gì mới" (optional)']
+  based_on_revision_id uuid [ref: > exam_revisions.id, note: 'Revision this draft was cloned from; source of the publish diff summary']
+  publish_at timestamptz [note: 'Scheduled publish time (status = scheduled)']
   published_at timestamptz
   published_by_user_id uuid [ref: > users.id]
+  created_by_user_id uuid [ref: > users.id]
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
     (tenant_id, id) [unique, name: 'uq_exam_revisions_tenant_id']
     (exam_id, revision_number) [unique, name: 'uq_exam_revisions_exam_number']
+    (exam_id, status) [name: 'ix_exam_revisions_status', note: 'Implement as partial UNIQUE (exam_id) WHERE status = draft (one draft per exam) + scheduler partial index WHERE status = scheduled']
+  }
+
+  checks {
+    `status <> 'scheduled' OR publish_at IS NOT NULL` [name: 'ck_exam_revisions_scheduled_at']
   }
 
   Note: '''
@@ -855,6 +942,9 @@ Table exam_revisions {
 they are tiny, immutable, always read with the revision and never referenced by FK
 (responses store section_key). Editing a published exam = new draft revision → publish →
 exams.current_revision_id moves. In-progress attempts finish on their pinned revision.
+[P3] Content Studio edits ONLY draft revisions (at most one draft per exam, partial unique
+(exam_id) WHERE status = 'draft'). Publishing runs the blocking checklist (content_studio_spec.md
+§9); scheduled revisions are promoted by a job at publish_at.
 '''
 }
 
@@ -900,6 +990,216 @@ Table exam_licenses {
 attempt the licensed exam's current revision; content stays owned and edited by the owner.
 Alternative coarse grant: tenant_entitlements.platform_library = all public platform exams.
 '''
+}
+
+Table revision_audio_tracks {
+  id uuid [pk, default: `gen_random_uuid()`]
+  tenant_id uuid [not null]
+  exam_revision_id uuid [not null]
+  section_key text [not null, note: 'exam_revisions.sections[].key with delivery = audio_paced, e.g. "L" (TOEIC) or "P1".."P4" (IELTS Listening, one track per Part)']
+  asset_id uuid [not null, note: 'content_assets(kind = audio, purpose = question_media). Mastered, continuous section recording']
+  duration_ms integer [not null]
+  sample_rate_hz integer [not null, note: 'QC: 44100 or 48000']
+  channels smallint [not null, default: 1]
+  loudness_lufs numeric(5,2) [note: 'Integrated loudness (EBU R128). QC target −16 ±1 LUFS']
+  true_peak_dbtp numeric(5,2) [note: 'QC: ≤ −1.0 dBTP']
+  qc jsonb [not null, default: `'{}'::jsonb`, note: 'Measured QC report: {"silence_head_ms":800, "clipping_samples":0, "noise_floor_db":-62, "malware_scan":"clean", "warnings":[...]}']
+  cues jsonb [not null, default: `'[]'::jsonb`, note: 'PROTECTED. [{position:32, start_ms, end_ms, confidence:0.97, source:"aligned"|"manual"|"imported"}] — position = exam_revision_items.position. Drives audio-paced paging (mock) and per-question replay/transcript sync (practice/review)']
+  script_segments jsonb [not null, default: `'[]'::jsonb`, note: 'PROTECTED transcript: [{start_ms, end_ms, speaker:"M1"|"W1"|"N", accent:"us"|"uk"|"au"|"ca", text}] — English only; revealed only in review']
+  alignment_ai_run_id uuid [ref: > ai_runs.id, note: 'Last forced-alignment run (ai_purpose = audio_alignment)']
+  aligned_at timestamptz
+  created_by_user_id uuid [ref: > users.id]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (exam_revision_id, section_key) [unique, name: 'uq_revision_audio_tracks_section']
+    (tenant_id, id) [unique, name: 'uq_revision_audio_tracks_tenant_id']
+    asset_id [name: 'ix_revision_audio_tracks_asset']
+  }
+
+  checks {
+    `duration_ms > 0` [name: 'ck_revision_audio_tracks_duration']
+    `channels IN (1, 2)` [name: 'ck_revision_audio_tracks_channels']
+  }
+
+  Note: '''
+[P3] Section-level listening audio of an exam revision with its cue map and script. TOEIC mock
+plays one continuous recording per section; IELTS one per Part. Question-group audio
+(question_groups.audio_asset_id) remains the source for practice sets that pick a subset;
+the publish checklist requires every listening position in the section to have a cue.
+Copy-on-write with the revision: a new draft revision clones the row (same asset, editable
+cues/script); published rows are immutable. QC thresholds are publish gates (service), not
+CHECKs, because measured values must be stored even when they fail.
+'''
+}
+
+Table exam_credits {
+  id uuid [pk, default: `gen_random_uuid()`]
+  exam_id uuid [not null, ref: > exams.id]
+  user_id uuid [ref: > users.id, note: 'NULL for external people (e.g. a hired narrator)']
+  display_name text [note: 'Public name; required when user_id IS NULL. Users may hide their real name']
+  role credit_role [not null]
+  position smallint [not null, default: 0, note: 'Display order']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (exam_id, user_id, role) [unique, name: 'uq_exam_credits_person_role', note: 'Partial: WHERE user_id IS NOT NULL']
+    (user_id) [name: 'ix_exam_credits_user', note: 'Contributor profile: published sets']
+  }
+
+  checks {
+    `user_id IS NOT NULL OR display_name IS NOT NULL` [name: 'ck_exam_credits_identity']
+  }
+
+  Note: '''
+[P3] Public attribution shown on catalog cards, exam-intro and results ("Biên soạn: Minh N. ·
+Giọng đọc: …"). Mandatory for provenance = community (≥ 1 author) and for CC BY 4.0.
+Exam-level (not revision-level) because credits accumulate; reviewers listed only by opt-in.
+'''
+}
+
+// =============================================================================
+// 4b. CONTENT WORKFLOW (Content Studio import · submissions · moderation)
+// =============================================================================
+
+Table content_import_jobs {
+  id uuid [pk, default: `gen_random_uuid()`]
+  tenant_id uuid [not null, ref: > tenants.id]
+  created_by_user_id uuid [not null]
+  package_asset_id uuid [not null, note: 'content_assets(purpose = import_package), ZIP ≤ 2 GB']
+  manifest_format text [not null, note: 'xlsx | csv | json']
+  manifest_version text [not null, note: 'Template version, e.g. engrisk-import/1.2']
+  exam_type_id uuid [not null, ref: > exam_types.id]
+  status import_status [not null, default: 'uploaded']
+  rights_basis rights_basis [not null]
+  rights_confirmed_at timestamptz [not null]
+  summary jsonb [not null, default: `'{}'::jsonb`, note: '{"rows_total":200, "rows_ok":193, "rows_error":7, "rows_warning":12, "assets_matched":54, "assets_missing":2, "assets_unused":1}']
+  errors jsonb [not null, default: `'[]'::jsonb`, note: 'First 500 issues: [{row, column, code:"E_KEY_MISSING", severity:"error"|"warning", message, hint}]. Full report downloadable as CSV']
+  exam_id uuid [note: 'Draft exam created (or updated: new draft revision) on completion']
+  exam_revision_id uuid
+  created_at timestamptz [not null, default: `now()`]
+  started_at timestamptz
+  finished_at timestamptz
+
+  indexes {
+    (tenant_id, created_at) [name: 'ix_content_import_jobs_tenant']
+    (status, created_at) [name: 'ix_content_import_jobs_queue', note: 'Partial: WHERE status IN (uploaded, validating)']
+  }
+
+  checks {
+    `rights_basis <> 'personal_study_only'` [name: 'ck_content_import_jobs_rights']
+    `status <> 'completed' OR exam_revision_id IS NOT NULL` [name: 'ck_content_import_jobs_result']
+  }
+
+  Note: '''
+[P3] Bulk import of a standard package (manifest + audio + images) into a DRAFT revision.
+Lifecycle: uploaded → validating → validated | failed → completed. Validation never writes
+question rows; "Tạo bản nháp" does, in one transaction (origin = imported). Re-validating a
+package = new job. Package-level errors block; row errors are skipped (those positions stay
+missing in the draft and surface in the publish checklist); warnings never block.
+P4: available to teachers (content.import).
+'''
+}
+
+Table content_submissions {
+  id uuid [pk, default: `gen_random_uuid()`]
+  tenant_id uuid [not null, note: 'Target (owning) tenant where the content will be published']
+  exam_id uuid [not null]
+  exam_revision_id uuid [not null, note: 'Draft revision frozen at submit (read-only while submitted/in_review)']
+  submitter_user_id uuid [not null]
+  status submission_status [not null, default: 'draft']
+  round smallint [not null, default: 1, note: '+1 on each resubmission after changes_requested']
+  license contribution_license [note: 'Required for provenance = community; NULL for tenant-internal submissions']
+  rights_basis rights_basis [not null, default: 'own_work']
+  rights_confirmed_at timestamptz [note: 'Contributor confirmed originality + licence at submit']
+  message_to_reviewer text
+  auto_checks jsonb [not null, default: `'{}'::jsonb`, note: '{"schema":"pass", "keys_complete":"pass", "explanations":"warn", "audio_qc":"pass", "originality":{"status":"pass","max_similarity":0.12,"matches":[]}, "copyright_fingerprint":"pass", "language":"pass", "safety":"pass", "ai_run_id":".."}']
+  assigned_reviewer_user_id uuid [ref: > users.id]
+  sla_due_at timestamptz [note: 'submitted_at + 5 business days (community) / 2 (tenant)']
+  appeal_of_submission_id uuid [ref: > content_submissions.id, note: 'Appeal of a rejected submission (one appeal allowed)']
+  submitted_at timestamptz
+  decided_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (tenant_id, id) [unique, name: 'uq_content_submissions_tenant_id']
+    (exam_id) [name: 'ix_content_submissions_active', note: 'Implement as partial UNIQUE (exam_id) WHERE status IN (draft, submitted, in_review, changes_requested): one active submission per exam']
+    (tenant_id, status, sla_due_at) [name: 'ix_content_submissions_queue', note: 'Moderation queue ordered by SLA']
+    (submitter_user_id, status) [name: 'ix_content_submissions_submitter', note: '"Đóng góp của tôi"']
+    (assigned_reviewer_user_id, status) [name: 'ix_content_submissions_reviewer']
+  }
+
+  checks {
+    `status = 'draft' OR (submitted_at IS NOT NULL AND rights_confirmed_at IS NOT NULL)` [name: 'ck_content_submissions_submitted']
+    `status NOT IN ('approved','rejected') OR decided_at IS NOT NULL` [name: 'ck_content_submissions_decided']
+    `assigned_reviewer_user_id IS NULL OR assigned_reviewer_user_id <> submitter_user_id` [name: 'ck_content_submissions_no_self_review']
+    `rights_basis <> 'personal_study_only'` [name: 'ck_content_submissions_rights']
+    `round >= 1` [name: 'ck_content_submissions_round']
+  }
+
+  Note: '''
+[P3] A request to publish one exam revision through review: community contributions
+(learner, submission.create) into the platform tenant, and P4 teacher drafts into their
+organization when the tenant requires review. Origin chip in the queue is derived from
+exams.provenance (community → Cộng đồng, tenant_authored → Giáo viên, engrisk_original → Nội bộ).
+Lifecycle: draft → submitted → in_review → approved | changes_requested | rejected; withdrawn
+from any non-terminal state. approve = revision published/scheduled + exams.visibility public
+(community) + exam_credits rows. Submitter must be a member of tenant_id (composite FK).
+'''
+}
+
+Table submission_reviews {
+  id uuid [pk, default: `gen_random_uuid()`]
+  submission_id uuid [not null, ref: > content_submissions.id]
+  reviewer_user_id uuid [not null, ref: > users.id]
+  round smallint [not null, note: 'content_submissions.round being decided']
+  decision review_decision [not null]
+  checklist jsonb [not null, default: `'{}'::jsonb`, note: '{"original":true, "keys_correct":true, "explanations":true, "audio_script":true, "level_tags_credits":true, "language_safety":true}']
+  reason_code text [note: 'Required for reject: copyright | format | quality | duplicate | unsafe. Optional for request_changes']
+  summary text [note: 'Message to the contributor (VI/EN), shown on contribute page']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (submission_id, round) [unique, name: 'uq_submission_reviews_round', note: 'One decision per round']
+    (reviewer_user_id, created_at) [name: 'ix_submission_reviews_reviewer']
+  }
+
+  checks {
+    `decision = 'approve' OR reason_code IS NOT NULL` [name: 'ck_submission_reviews_reason']
+  }
+
+  Note: '''
+[P3] Immutable decision log (audit). Service rules: reviewer_user_id ≠ submission submitter
+(nobody approves their own work); approve requires every checklist item true and no blocking
+auto-check; reject with reason copyright also opens a takedown hold.
+'''
+}
+
+Table review_comments {
+  id uuid [pk, default: `gen_random_uuid()`]
+  submission_id uuid [not null]
+  author_user_id uuid [not null, ref: > users.id, note: 'Reviewer or contributor (replies)']
+  parent_comment_id uuid [ref: > review_comments.id, note: 'Thread reply']
+  question_id uuid [ref: > questions.id, note: 'Anchor: exact question version; NULL = whole submission']
+  field text [not null, default: 'general', note: 'stem | options | answer_key | explanation | stimulus | image_alt | audio | script | metadata | general']
+  audio_ms integer [note: 'Optional timestamp anchor when field = audio/script']
+  body text [not null]
+  resolved_at timestamptz
+  resolved_by_user_id uuid [ref: > users.id]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (submission_id, resolved_at) [name: 'ix_review_comments_open', note: 'Unresolved count per submission']
+    question_id [name: 'ix_review_comments_question']
+  }
+
+  checks {
+    `field IN ('stem','options','answer_key','explanation','stimulus','image_alt','audio','script','metadata','general')` [name: 'ck_review_comments_field']
+  }
+
+  Note: '[P3] Reviewer comments anchored to a question/field, shown in moderation, contribute and the editor (contributor mode). Resubmission is blocked while comments from the last round are unresolved (service rule).'
 }
 
 // =============================================================================
@@ -1099,6 +1399,32 @@ Exists only for read performance — not a source of truth.
 '''
 }
 
+Table exam_ratings {
+  exam_id uuid [not null, ref: > exams.id]
+  user_id uuid [not null]
+  tenant_id uuid [not null, note: 'Tenant context the learner rated in (membership)']
+  exam_revision_id uuid [not null, ref: > exam_revisions.id, note: 'Revision the learner actually took']
+  rating smallint [not null]
+  issue_tags text[] [note: 'Optional low-rating reasons: wrong_key | unclear_audio | typo | too_easy | too_hard']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (exam_id, user_id) [pk]
+    (exam_id, rating) [name: 'ix_exam_ratings_exam', note: 'Aggregate for catalog ★ + Studio/contributor stats']
+  }
+
+  checks {
+    `rating BETWEEN 1 AND 5` [name: 'ck_exam_ratings_range']
+  }
+
+  Note: '''
+[P3] One 1–5 star rating per learner per exam (upsert), offered on results after a completed
+attempt (service rule: requires attempts.status = completed for that exam). Shown in the
+catalog only when ≥ 10 ratings. Ratings ≤ 2 with issue_tags feed a Studio quality todo.
+'''
+}
+
 // =============================================================================
 // 6. AI PROVENANCE & TUTOR
 // =============================================================================
@@ -1197,11 +1523,16 @@ Ref: learner_goals.(tenant_id, user_id) > tenant_memberships.(tenant_id, user_id
 Ref: attempts.(tenant_id, user_id) > tenant_memberships.(tenant_id, user_id)
 Ref: learner_skill_stats.(tenant_id, user_id) > tenant_memberships.(tenant_id, user_id)
 Ref: tutor_conversations.(tenant_id, user_id) > tenant_memberships.(tenant_id, user_id)
+Ref: exam_ratings.(tenant_id, user_id) > tenant_memberships.(tenant_id, user_id)
 
 // Private content owners must be members of the owning tenant
 Ref: question_groups.(tenant_id, owner_user_id) > tenant_memberships.(tenant_id, user_id)
 Ref: questions.(tenant_id, owner_user_id) > tenant_memberships.(tenant_id, user_id)
 Ref: exams.(tenant_id, owner_user_id) > tenant_memberships.(tenant_id, user_id)
+
+// Content workflow actors must be members of the tenant they act in
+Ref: content_import_jobs.(tenant_id, created_by_user_id) > tenant_memberships.(tenant_id, user_id)
+Ref: content_submissions.(tenant_id, submitter_user_id) > tenant_memberships.(tenant_id, user_id)
 
 // Authoring graph stays inside one tenant
 Ref: source_materials.(tenant_id, asset_id) > content_assets.(tenant_id, id)
@@ -1213,9 +1544,18 @@ Ref: questions.(tenant_id, source_material_id) > source_materials.(tenant_id, id
 Ref: exam_revisions.(tenant_id, exam_id) > exams.(tenant_id, id)
 Ref: exam_revision_items.(tenant_id, exam_revision_id) > exam_revisions.(tenant_id, id) [delete: cascade]
 Ref: exam_revision_items.(tenant_id, question_id) > questions.(tenant_id, id)
+Ref: exams.(tenant_id, cover_asset_id) > content_assets.(tenant_id, id)
+Ref: revision_audio_tracks.(tenant_id, exam_revision_id) > exam_revisions.(tenant_id, id) [delete: cascade]
+Ref: revision_audio_tracks.(tenant_id, asset_id) > content_assets.(tenant_id, id)
+Ref: content_import_jobs.(tenant_id, package_asset_id) > content_assets.(tenant_id, id)
+Ref: content_import_jobs.(tenant_id, exam_id) > exams.(tenant_id, id)
+Ref: content_import_jobs.(tenant_id, exam_revision_id) > exam_revisions.(tenant_id, id)
+Ref: content_submissions.(tenant_id, exam_id) > exams.(tenant_id, id)
+Ref: content_submissions.(tenant_id, exam_revision_id) > exam_revisions.(tenant_id, id)
 
 // Compositions (child rows have no meaning without parent)
 Ref: tutor_messages.conversation_id > tutor_conversations.id [delete: cascade]
+Ref: review_comments.submission_id > content_submissions.id [delete: cascade]
 
 // =============================================================================
 // TABLE GROUPS
@@ -1258,7 +1598,17 @@ TableGroup exam_content [color: #10B981] {
   exam_revisions
   exam_revision_items
   exam_licenses
-  Note: 'One question bank for all formats and origins; exams publish immutable revisions.'
+  revision_audio_tracks
+  exam_credits
+  Note: 'One question bank for all formats and origins; exams publish immutable revisions with section audio, cues, scripts and credits.'
+}
+
+TableGroup content_workflow [color: #0EA5E9] {
+  content_import_jobs
+  content_submissions
+  submission_reviews
+  review_comments
+  Note: 'Content Studio import, community/teacher submissions and moderation decisions (P3/P4).'
 }
 
 TableGroup learning_records [color: #F59E0B] {
@@ -1269,7 +1619,8 @@ TableGroup learning_records [color: #F59E0B] {
   evaluations
   attempt_scores
   learner_skill_stats
-  Note: 'Historical facts of learning; pinned to exact content versions.'
+  exam_ratings
+  Note: 'Historical facts of learning; pinned to exact content versions. Includes learner ratings of exams.'
 }
 
 TableGroup ai [color: #EC4899] {

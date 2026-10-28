@@ -11,9 +11,7 @@ function rLanding(){
   const m=isM();
   const floats = `
     <div class="float float--1">${skillTile('reading','sm')}<div><div class="text-xs text-muted">${T('TOEIC ước tính','Estimated TOEIC')}</div><div class="row gap-1"><b class="tnum text-base">600</b>${trend('30')}</div></div></div>
-    <div class="float float--2" style="max-width:220px">${tile('shield-check','success','sm')}<div><div class="text-xs font-semibold text-success">${T('Đáp án đã kiểm duyệt','Verified answer')}</div><div class="text-xs">${T('“by” + mốc thời gian = hạn chót','“by” + time = deadline')}</div></div></div>
-    <div class="float float--3">${avatar('AI',{size:'sm',color:'inverse'})}<div><div class="text-xs text-muted row gap-1">${icon('sparkles',11)}AI Tutor</div><div class="text-xs font-medium">Submit BY, wait UNTIL.</div></div></div>
-    <div class="float float--4">${skillTile('listening','sm')}<span class="text-xs font-medium">Part 3 · 5 ${T('phút','min')}</span></div>`;
+    <div class="float float--2" style="max-width:220px">${tile('shield-check','success','sm')}<div><div class="text-xs font-semibold text-success">${T('Đáp án đã kiểm duyệt','Verified answer')}</div><div class="text-xs">${T('“by” + mốc thời gian = hạn chót','“by” + time = deadline')}</div></div></div>`;
   const hero = `<section class="hero">
     <div class="col gap-5">
       <div class="row row--wrap">${chip(T('Mới · AI Tutor giải thích câu sai','New · AI Tutor explains mistakes'),'accent','sparkles')}</div>
@@ -31,15 +29,14 @@ function rLanding(){
       ${floats}
     </div>
   </section>`;
-  const exams = `<section class="row row--wrap row--center gap-3">${[['TOEIC','Listening & Reading','reading'],['IELTS','Academic','writing'],['IELTS','General Training','speaking']].map(([a,b,s])=>`<button type="button" class="card card--press" style="flex-direction:row;align-items:center;gap:12px;padding:12px 16px" data-action="pickTrack" data-v="${a.toLowerCase()}" data-fk="track:${a}${b}">${skillTile(s,'sm')}<span><b>${a}</b> <span class="text-muted">${b}</span></span>${icon('chevron-right',14,'text-muted')}</button>`).join('')}</section>`;
   const steps = [
-    ['wave',T('Chọn mục tiêu (hoặc bỏ qua)','Pick a goal (or skip)'),T('4 câu hỏi nhanh, Pip gợi ý bài phù hợp.','4 quick questions; Pip suggests the right set.')],
-    ['think',T('Luyện 5–15 phút','Practice 5–15 minutes'),T('Mỗi câu có đáp án kiểm duyệt và bằng chứng trong bài.','Every question has a verified answer and evidence.')],
-    ['cheer',T('Thấy mình tiến bộ','See yourself improve'),T('Điểm ước tính và kỹ năng yếu nhất cần luyện tiếp.','Estimated score and your weakest skill to practice next.')],
+    ['target',T('Chọn mục tiêu (hoặc bỏ qua)','Pick a goal (or skip)'),T('4 câu hỏi nhanh để gợi ý bài phù hợp.','4 quick questions to suggest the right set.')],
+    ['book-open',T('Luyện 5–15 phút','Practice 5–15 minutes'),T('Mỗi câu có đáp án kiểm duyệt và bằng chứng.','Every question has a verified answer and evidence.')],
+    ['chart-line-arrow-up',T('Thấy mình tiến bộ','See yourself improve'),T('Điểm ước tính và kỹ năng cần luyện tiếp.','Estimated score and what to practise next.')],
   ];
   const how = `<section><div class="section-head"><span class="eyebrow">${T('Cách hoạt động','How it works')}</span><h2>${T('Ba bước, mỗi ngày một chút','Three steps, a little every day')}</h2></div>
-    <div class="grid ${m?'':'grid-3'}">${steps.map(([mood,t,d],i)=>`<div class="card card--lg" style="align-items:center;text-align:center">${mascot({mood,size:96})}<span class="step-num">${i+1}</span><div class="text-lg font-semibold">${t}</div><p class="text-muted">${d}</p></div>`).join('')}</div></section>`;
-  const bento = `<section><div class="section-head"><span class="eyebrow">${T('Tính năng','Features')}</span><h2>${T('Mọi thứ để luyện đúng chỗ yếu','Everything to fix your weak spots')}</h2><p>${T('Không streak gây áp lực, không quảng cáo điểm “chính thức” — chỉ luyện tập rõ ràng và trung thực.','No streak pressure, no fake “official” scores — just clear, honest practice.')}</p></div>
+    <div class="grid ${m?'':'grid-3'}">${steps.map(([ic,t,d],i)=>`<div class="card card--lg step-card">${tile(ic,'accent','lg')}<div class="text-xs font-semibold text-muted">${T('Bước','Step')} ${i+1}</div><div class="text-lg font-semibold">${t}</div><p class="text-muted">${d}</p></div>`).join('')}</div></section>`;
+  const bento = `<section><div class="section-head"><span class="eyebrow">${T('Tính năng','Features')}</span><h2>${T('Mọi thứ để luyện đúng chỗ yếu','Everything to fix your weak spots')}</h2></div>
     <div class="bento">
       <div class="card card--lg bento__big tint-band tint-reading" style="justify-content:space-between">
         <div class="col gap-2">${skillTile('reading','lg')}<div class="text-xl font-semibold">${T('Giải thích có bằng chứng','Explanations with evidence')}</div><p class="text-muted">${T('Đáp án kiểm duyệt, giải thích ngắn, và câu chứa bằng chứng được tô sáng ngay trong đoạn văn.','Verified answers, short explanations, and the evidence sentence highlighted in the passage.')}</p></div>
@@ -50,14 +47,9 @@ function rLanding(){
       <div class="card card--lg tint-band tint-writing">${skillTile('writing')}<div class="text-base font-semibold">IELTS Writing & Speaking ${phase('P2')}</div><p class="text-sm text-muted">${T('Band ước tính theo 4 tiêu chí.','Estimated band on 4 criteria.')}</p></div>
       <div class="card card--lg tint-band tint-personal">${tile('file-arrow-up','warning')}<div class="text-base font-semibold">${T('Tạo bài từ tài liệu','Practice from your files')} ${phase('P3')}</div><p class="text-sm text-muted">${T('Riêng tư, bạn duyệt trước khi luyện.','Private; you approve before practicing.')}</p></div>
     </div></section>`;
-  const langs = `<section class="card card--lg" style="align-items:center;text-align:center;gap:16px">${tile('globe','accent','lg')}<div class="col gap-1"><h2 class="text-2xl font-bold tracking-tight">${T('Học bằng ngôn ngữ của bạn','Learn in your language')}</h2><p class="text-muted">${T('Giao diện và giải thích theo ngôn ngữ bạn chọn; đề thi luôn bằng tiếng Anh.','Interface and explanations in your language; exam content stays in English.')}</p></div>
-    <div class="row row--wrap row--center gap-2">${LANGS.map(([c,n,en,ok])=>`<span class="lang-chip ${ok?'':'lang-chip--soon'}">${n}${ok?(c===S.lang?icon('check',12,'text-accent'):''):` · ${T('sắp có','soon')}`}</span>`).join('')}</div>${langPicker('landing-mid',{full:true})}</section>`;
-  const quotes = [['MN','var(--sw-blue)','Minh · TOEIC 650 → 735',T('Mỗi tối 15 phút trên điện thoại. Phần giải thích có bằng chứng giúp mình hết nhầm “by” và “until”.','15 minutes every night on my phone. Evidence-based explanations finally fixed my “by” vs “until” mistakes.')],['LH','var(--sw-purple)','Lan · IELTS 6.0 → 6.5',T('Mình thích việc điểm AI luôn hiện dạng khoảng — trung thực hơn nhiều app khác.','I like that AI scores are shown as a range — more honest than other apps.')],['KT','var(--sw-orange)','Kenji · TOEIC 580',T('Giao diện tiếng Anh, đề tiếng Anh, nhưng có thể đổi sang ngôn ngữ của mình sau này.','English UI and English content — and my own language is coming.')]];
-  const testimonials = `<section><div class="section-head"><span class="eyebrow">${T('Người học nói gì','What learners say')}</span><h2>${T('Tiến bộ thật, từng chút một','Real progress, bit by bit')}</h2>${sim(T('nội dung minh họa','illustrative content'))}</div>
-    <div class="grid ${m?'':'grid-3'}">${quotes.map(([i,c,n,q])=>`<div class="card card--lg"><p class="text-base" style="line-height:26px">“${q}”</p><div class="row gap-3" style="margin-top:auto">${avatar(i,{color:'default',style:`background:color-mix(in oklab,${c} 22%,var(--surface));color:color-mix(in oklab,${c} 60%,var(--foreground))`})}<span class="text-sm font-semibold">${n}</span></div></div>`).join('')}</div></section>`;
-  const cta = `<section class="cta-band">${mascot({mood:'cheer',size:m?120:150})}<div class="col gap-3 grow"><h2 class="text-3xl font-bold tracking-tight">${T('Bắt đầu bài đầu tiên ngay hôm nay','Start your first set today')}</h2><p class="text-muted">${T('Miễn phí, không cần thẻ. Kết quả khách được giữ khi bạn tạo tài khoản.','Free, no card needed. Guest results are kept when you sign up.')}</p><div class="row row--wrap ${m?'row--center':''}">${btn(T('Luyện thử 5 phút','Try a 5-minute set'),{size:'lg',ic:'play-fill',action:'quick'})}${btn(T('Xem tất cả bài','Browse all sets'),{v:'tertiary',size:'lg',iconR:'arrow-right',action:'go',data:{to:'catalog'}})}</div></div></section>`;
+  const cta = `<section class="cta-band"><div class="col gap-3 grow"><h2 class="text-3xl font-bold tracking-tight">${T('Bắt đầu bài đầu tiên ngay hôm nay','Start your first set today')}</h2><p class="text-muted">${T('Miễn phí, không cần thẻ. Kết quả khách được giữ khi bạn tạo tài khoản.','Free, no card needed. Guest results are kept when you sign up.')}</p></div><div class="row row--wrap ${m?'row--center':''}">${btn(T('Luyện thử 5 phút','Try a 5-minute set'),{size:'lg',ic:'play-fill',action:'quick'})}${btn(T('Xem đề','Browse tests'),{v:'tertiary',size:'lg',iconR:'arrow-right',action:'go',data:{to:'catalog'}})}</div></section>`;
   const footer = `<footer class="footer">${brand()}<span>© 2026 Engrisk · ${T('Điều khoản','Terms')} · ${T('Quyền riêng tư','Privacy')}</span>${langPicker('footer',{up:true,full:true})}</footer>`;
-  return `<div class="landing">${langSuggestBanner()}${hero}${exams}${how}${bento}${langs}${testimonials}${cta}${footer}</div>`;
+  return `<div class="landing">${langSuggestBanner()}${hero}${how}${bento}${cta}${footer}</div>`;
 }
 
 function rAuth(){

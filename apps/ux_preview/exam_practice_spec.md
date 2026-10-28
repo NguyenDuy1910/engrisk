@@ -3,7 +3,8 @@
 > Thiết kế chi tiết cho luồng **Luyện đề → Thiết lập → Phòng thi (test player) → Kết quả → Xem lại → Làm lại câu sai**.
 > Prototype: `ux-preview.html` (màn `catalog`, `exam-intro`, `exam`, `results`, `review`; panel trái có nút demo “TOEIC thi thử / luyện tập / IELTS Reading / IELTS Listening”).
 > Code tham chiếu: `scripts/player-core.js`, `player-toeic.js`, `player-ielts.js`, `player-events.js`, `screens-practice.js`, `screens-results.js`, `styles/player.css`.
-> Dữ liệu: `backend/docs_design/schema.dbml` (`exam_revisions.sections`, `attempts.settings/resume_state`, `attempt_responses`, `attempt_annotations`).
+> Dữ liệu: `backend/docs_design/schema.dbml` (`exam_revisions.sections`, `attempts.settings/resume_state`, `attempt_responses`, `attempt_annotations`; catalog: `exams.cover_style/provenance`, `exam_credits`, `exam_ratings`).
+> Nguồn nội dung (Content Studio, đóng góp cộng đồng, kiểm duyệt): `content_studio_spec.md`.
 
 ---
 
@@ -67,16 +68,40 @@ flowchart LR
 
 | Vùng (trên → dưới) | Component | Hành vi |
 |---|---|---|
-| Header | `Tabs` TOEIC L&R / IELTS Academic · `InputGroup` tìm kiếm | Đổi tab giữ bộ lọc loại; tìm theo tên đề/Part |
-| Lọc loại | `Tabs sm`: Tất cả · Đề đầy đủ · Theo Part (TOEIC) / Dạng câu hỏi (IELTS) · Bài ngắn | Ẩn/hiện section, không reload |
+| Header | `Tabs` TOEIC L&R / IELTS Academic · `InputGroup` tìm kiếm | Đổi tab giữ bộ lọc loại; tìm theo tên đề/Part/tác giả |
+| Lọc loại | `Tabs sm`: Tất cả · Đề đầy đủ · Theo Part (TOEIC) / Dạng câu hỏi (IELTS) · Bài ngắn · **Cộng đồng** | Ẩn/hiện section, không reload. “Cộng đồng” chỉ hiện section “Từ cộng đồng” |
 | Tiếp tục | Card viền accent: đề, phần, câu đang dừng, thời gian còn | Chỉ hiện nếu có attempt dở của kỳ thi đang chọn; CTA “Tiếp tục” |
-| Đề thi thử đầy đủ | Grid 3 cột `test-card`: tint kỹ năng, Listening·45′ / Reading·75′, 200 câu, độ khó, chip “Đang làm dở”, “Đã làm 1× · tốt nhất 600” | “Làm đề” → Thiết lập. Khóa: “Cần tài khoản” (khách) / “Premium · tương lai” |
-| Luyện theo Part (TOEIC) | Grid 4 cột `part-tile`: số Part lớn, tên, “Câu 32–70 · 39 câu/đề”, `Meter` độ chính xác của bạn (đỏ < 55%, vàng < 70%, xanh) | Bấm → Thiết lập ở chế độ Luyện tập, **chỉ Part đó được chọn sẵn** |
-| Luyện theo dạng câu (IELTS) | 8 tile: TFNG, Summary completion, Matching headings, Matching features, Form, Map, Multiple choice (2), Note completion | Mở đúng đề + Part chứa dạng câu đó |
-| Bài ngắn | List card: phút · câu · độ khó · “Bắt đầu” | Vào thẳng phòng thi (luyện tập, cấu hình mặc định) |
-| CTA tài liệu (P3) | Card press | → `library` |
+| Từ Sunrise English (tenant) | `sectionTitle` + grid thẻ: bìa compact có tenant mark, tên, chip “Chỉ thành viên” (`persons-lock`), “Giao bởi Hạnh Vũ” (avatar), chip “Hạn 30/10” | Chỉ khi `active_tenant` là tổ chức và có đề `visibility = tenant` đã xuất bản; đặt **trên** đề đầy đủ (bài được giao trước). Ẩn khi trống |
+| Đề thi thử đầy đủ | Grid 3 cột `test-card`: **bìa** (§3.1) + badge nguồn gốc, eyebrow kỳ thi + tên ngắn, Listening·45′ / Reading·75′, 200 câu, độ khó, ★ + lượt làm; footer = **1** chip trạng thái (“Đang làm dở” / “Tốt nhất 600” / “Chưa làm” / khóa) + CTA | “Làm đề” → Thiết lập. Khóa: “Cần tài khoản” (khách) / “Premium · tương lai” |
+| Luyện theo Part (TOEIC) | Grid 4 cột `part-tile`: **icon Part** trong tile tô màu kỹ năng (§3.2) + số Part lớn, tên, “Câu 32–70 · 39 câu/đề”, thanh + % độ chính xác của bạn trên cùng hàng (đỏ < 55%, vàng < 70%, xanh — luôn kèm số %) | Bấm → Thiết lập ở chế độ Luyện tập, **chỉ Part đó được chọn sẵn** |
+| Luyện theo dạng câu (IELTS) | 8 tile có icon: TFNG, Summary completion, Matching headings, Matching features, Form, Map, Multiple choice (2), Note completion | Mở đúng đề + Part chứa dạng câu đó |
+| Bài ngắn | List card: **thumbnail bìa compact** · phút · câu · độ khó · “Bắt đầu” | Vào thẳng phòng thi (luyện tập, cấu hình mặc định) |
+| Từ cộng đồng | `sectionTitle` “Từ cộng đồng” + count + `tertiary sm` “Đóng góp đề” (học viên → `contribute`; khách → tạo tài khoản; staff → ẩn). Thẻ: bìa compact + avatar tác giả, tên, chip **“Đã kiểm duyệt”** (`shield-check`), ★ + lượt làm, giấy phép (CC BY 4.0 / Engrisk license), “Bắt đầu” | Chỉ đề `provenance = community` đã qua duyệt. ★/lượt làm/CTA ở cột cố định để thẳng hàng |
 
-Trạng thái: loading (skeleton 3 card), error (Alert + Thử lại; vẫn tiếp tục được bài dở từ Trang chủ), empty khi tìm kiếm không ra (Pip `think` + Xóa tìm kiếm).
+Trạng thái: loading (skeleton 3 card), error (Alert + Thử lại; vẫn tiếp tục được bài dở từ Trang chủ), empty khi tìm kiếm không ra (Pip `think` + Xóa tìm kiếm). Section tenant/cộng đồng **ẩn** khi không có đề (không empty state riêng).
+
+### 3.1 Ảnh bìa đề
+- Dựng bằng `examCover(idOrSpec, {h, compact})` — một hàm cho catalog, Studio, Đóng góp. Nền gradient theo token tint kỹ năng (đúng 5 preset, sáng/tối, accent tenant); motif theo loại: **full mock** = phiếu trả lời xếp chồng + thanh L/R · **Listening** = sóng âm · **Reading** = dòng chữ/khối đoạn · **IELTS** = trang passage có headings · label lớn trong mờ (“01”, “P5”).
+- Badge nguồn gốc luôn có chữ + icon: **Engrisk Original** (`shield-check`) · tenant mark + “Thành viên” · avatar tác giả + “Cộng đồng”. Bìa là trang trí (`aria-hidden`); tên đề vẫn là text thật.
+- Dữ liệu: `exams.cover_style` (motif/tint/label), `exams.cover_asset_id` (ảnh tải lên, chỉ staff), `exams.provenance`. Chi tiết: `content_studio_spec.md` §4.
+
+### 3.2 Icon Part & dạng câu hỏi
+| TOEIC | Icon | IELTS | Icon |
+|---|---|---|---|
+| P1 Photographs | `camera` | True/False/Not Given | `check-double` |
+| P2 Question–Response | `comments` | Matching headings | `list-ul` |
+| P3 Conversations | `persons` | Summary completion | `text` |
+| P4 Talks | `volume` | Matching features | `link` |
+| P5 Incomplete Sentences | `font` | Form completion | `square-dashed-text` |
+| P6 Text Completion | `file-text` | Map labelling | `map-pin` |
+| P7 Reading Comprehension | `files` | Multiple choice | `list-check` |
+| | | Note completion | `pencil` |
+
+Icon bổ trợ cho số Part/tên dạng câu (không thay chữ). `exam-intro` và `results` dùng cùng icon cho dòng Part.
+
+### 3.3 Nguồn gốc & tin cậy trên `exam-intro` / `results`
+- `exam-intro`: dòng **Ghi công** (Biên soạn · Giọng đọc) + giấy phép cho đề cộng đồng/đối tác (`exam_credits`); “Báo cáo vi phạm” ở menu ⋯.
+- `results`: thẻ đánh giá ★ 1–5 (sau bài hoàn thành, `exam_ratings`) + “Báo lỗi câu hỏi” (wrong key / audio không rõ / lỗi chính tả) → việc cần làm trong Content Studio của chủ sở hữu đề.
 
 ---
 
@@ -236,7 +261,7 @@ Mỗi thay đổi đáp án/flag → badge “Đang lưu… → Đã lưu” (de
 | Space | Phát/dừng audio (chỉ luyện tập) |
 | Esc | Đóng popover / hộp thoại (trừ “Đang chấm”, “Chuyển phần”) |
 
-Phím không hoạt động khi đang gõ trong ô nhập/textarea.
+Phím không hoạt động khi đang gõ trong ô nhập/textarea. Danh sách phím tắt nằm trong popover **Cài đặt** của phòng thi (Web), không hiển thị thường trực ở footer — footer chỉ còn Trước · “Câu x–y · trang n/N” · Tiếp/Nộp.
 
 ---
 

@@ -1,5 +1,8 @@
 /* Test player (TOEIC & IELTS), practice hub, setup, results/review patterns.
  * Built from HeroUI tokens only; reading-comfort settings scale type and swap surfaces. */
+.shortcut-list{display:grid;grid-template-columns:auto 1fr;gap:6px 10px;align-items:center;font-size:13px}.shortcut-list > span{display:inline-flex;gap:3px}
+.acc{display:inline-flex;align-items:center;gap:8px;width:100%}.acc__bar{position:relative;flex:1;height:6px;border-radius:3px;background:var(--default);overflow:hidden}.acc__bar i{position:absolute;inset:0 auto 0 0;border-radius:inherit;background:var(--success)}
+.acc--warning .acc__bar i{background:var(--warning)}.acc--danger .acc__bar i{background:var(--danger)}.acc b{width:36px;text-align:right;font-size:12px;font-weight:600}
 .block{display:block}
 /* calculated colours must recompute inside a player that re-themes itself (Settings → Colour) */
 .player{--surface-hover:color-mix(in oklab,var(--surface) 92%,var(--surface-foreground) 8%);--default-hover:color-mix(in oklab,var(--default) 96%,var(--default-foreground) 4%);--accent-hover:color-mix(in oklab,var(--accent) 90%,var(--accent-foreground) 10%);--accent-soft:color-mix(in oklab,var(--accent) var(--soft-a),transparent);--success-soft:color-mix(in oklab,var(--success) var(--soft-a),transparent);--warning-soft:color-mix(in oklab,var(--warning) var(--soft-a),transparent);--danger-soft:color-mix(in oklab,var(--danger) var(--soft-a),transparent);
@@ -181,11 +184,11 @@ mark.hl--note{background:color-mix(in oklab,var(--sw-sky) 40%,transparent);borde
 .part-pick{display:flex;flex-direction:column;gap:2px;padding:6px 0;border-top:1px solid var(--separator)}.part-pick:first-of-type{border-top:0}
 .part-pick__sec{align-items:center;padding:6px 4px}
 .part-row{display:flex;align-items:center;gap:12px;padding:8px 6px;border-radius:12px;cursor:pointer;transition:background-color .15s}.part-row:hover{background:var(--surface-secondary)}
-.part-row__tag{width:64px;flex-shrink:0;font-size:12px;font-weight:700}
-.part-row__acc{width:120px;flex-shrink:0}.part-row__acc .meter__label{display:none}
+.part-row__tag{width:52px;flex-shrink:0;font-size:12px;font-weight:700}
+.part-row__acc{width:120px;flex-shrink:0}
+.part-row__flag{width:64px;flex-shrink:0;display:flex;justify-content:flex-end}
 .setup-summary{gap:14px}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;margin:0;font-size:14px}.kv dt{color:var(--muted)}.kv dd{margin:0;font-weight:600;text-align:right}
-.setup-pip{align-self:center}
 .submit-parts{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:var(--radius-xl);background:var(--surface-secondary);max-height:160px;overflow:auto}
 /* ---------- Results / review ---------- */
 .sheet-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px}
@@ -200,3 +203,40 @@ mark.hl--note{background:color-mix(in oklab,var(--sw-sky) 40%,transparent);borde
 .pill.is-current{box-shadow:0 0 0 2px var(--foreground)}.pill.is-dim{opacity:.4}
 .review-stim{position:sticky;top:0}
 .review-q .tq{box-shadow:none;padding:0}.review-q .qset{padding-bottom:12px;margin-bottom:12px}
+
+/* ========== Catalog imagery: exam covers, set cards, Part/type tiles (examCover · testCard · communityCard · tenantCard) ========== */
+.cover{position:relative;overflow:hidden;isolation:isolate;flex-shrink:0;height:var(--cover-h);
+  background:radial-gradient(120% 100% at 100% 0%,color-mix(in oklab,var(--tint) 30%,transparent),transparent 62%),
+    linear-gradient(135deg,color-mix(in oklab,var(--tint) 24%,var(--surface)),color-mix(in oklab,var(--tint) 7%,var(--surface)))}
+.cover__label{position:absolute;left:16px;bottom:-.14em;z-index:0;font-weight:800;letter-spacing:-.05em;line-height:1;font-variant-numeric:tabular-nums;color:color-mix(in oklab,var(--tint) 46%,transparent);pointer-events:none;white-space:nowrap}
+.cover__art{position:absolute;right:6px;top:0;z-index:1;height:100%;width:auto;max-width:72%}
+.cover__badge{position:absolute;left:10px;top:10px;z-index:2;display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px 0 7px;border-radius:999px;background:color-mix(in oklab,var(--surface) 90%,transparent);box-shadow:var(--surface-shadow);backdrop-filter:blur(6px);font-size:11px;font-weight:600;color:var(--foreground);white-space:nowrap}
+.cover__badge .gi{color:var(--accent)}
+.cover__av{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:8px;font-size:8px;font-weight:700;letter-spacing:0}
+.cover__av.avatar--accent{background:var(--accent-soft);color:var(--accent-soft-foreground)}.cover__av.avatar--success{background:var(--success-soft);color:var(--success-soft-foreground)}.cover__av.avatar--warning{background:var(--warning-soft);color:var(--warning-soft-foreground)}
+.cover__av--tenant{border-radius:5px;background:var(--accent);color:var(--accent-foreground)}
+.cover--compact{width:var(--cover-w);border-radius:10px;box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--tint) 22%,transparent)}
+.cover--compact .cover__art{right:0;width:100%;max-width:none;opacity:.5}
+.cover--compact .cover__label{left:0;right:0;top:50%;bottom:auto;transform:translateY(-50%);z-index:2;text-align:center;letter-spacing:-.03em;color:color-mix(in oklab,var(--tint) 55%,var(--foreground))}
+.cover__mark{position:absolute;right:3px;top:3px;z-index:3;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:5px;font-size:9px;font-weight:700;box-shadow:0 0 0 1.5px var(--surface)}
+.cover__mark--community{background:var(--success-soft);color:var(--success-soft-foreground)}.cover__mark--tenant{background:var(--accent);color:var(--accent-foreground)}
+/* motif ink (SVG classes; tokens only) */
+.cover .cv-paper{fill:var(--surface);stroke:color-mix(in oklab,var(--tint) 30%,transparent);stroke-width:1}
+.cover .cv-back{fill:color-mix(in oklab,var(--surface) 72%,var(--tint))}
+.cover .cv-ink{fill:color-mix(in oklab,var(--foreground) 16%,transparent)}
+.cover .cv-tint{fill:color-mix(in oklab,var(--tint) 82%,var(--foreground))}
+.cover .cv-soft{fill:color-mix(in oklab,var(--tint) 34%,transparent)}
+.cover .cv-ring{fill:none;stroke:color-mix(in oklab,var(--foreground) 22%,transparent);stroke-width:1.2}
+.cover .cv-dash{fill:color-mix(in oklab,var(--tint) 10%,transparent);stroke:color-mix(in oklab,var(--tint) 70%,var(--foreground));stroke-width:1.1;stroke-dasharray:3 2}
+.cover .cv-l{fill:var(--skill-listening)}.cover .cv-r{fill:var(--skill-reading)}
+.cover .cv-tag{font:700 8px Inter,system-ui,sans-serif;fill:var(--surface)}
+/* cards */
+.test-card .test-card__body{gap:10px;padding:14px 16px 12px}
+.test-card .text-foreground{color:var(--foreground)}
+.test-card__prov{display:flex;align-items:center;gap:6px 12px;flex-wrap:wrap;font-size:12px;color:var(--muted);min-width:0}
+.set-head{display:flex;align-items:flex-start;gap:12px;min-width:0}
+.set-head__title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.35}
+.part-tile .acc{margin-top:auto}
+.list-box-item > .cover--compact{align-self:center}
+/* mobile: 5 kind tabs scroll horizontally; fade the trailing edge so the overflow is discoverable */
+.catalog-kinds .tabs{width:100%;-webkit-mask-image:linear-gradient(90deg,var(--foreground) 86%,transparent);mask-image:linear-gradient(90deg,var(--foreground) 86%,transparent)}

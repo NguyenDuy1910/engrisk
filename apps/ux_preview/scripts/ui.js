@@ -15,6 +15,8 @@ const chip = (label,color='default',ic,{size='',v='soft'}={}) => `<span class="c
 const phase = p => `<span class="phase" title="Roadmap phase">${p}</span>`;
 const sim = (t) => `<span class="sim">${icon('circle-info',11)}${t||T('Mô phỏng','Simulated')}</span>`;
 const pct = (v,m) => Math.max(0,Math.min(100,Math.round(v/m*100)));
+/** Inline accuracy: bar + % on one line, fixed % width so rows/tiles line up */
+const accBar = v => { const p=Math.round(v*100), c=v<.55?'danger':v<.7?'warning':'success'; return `<span class="acc acc--${c}" role="meter" aria-valuenow="${p}" aria-valuemin="0" aria-valuemax="100" aria-label="${T('Độ chính xác','Accuracy')} ${p}%"><span class="acc__bar"><i style="width:${p}%"></i></span><b class="tnum">${p}%</b></span>`; };
 const progressBar = (val,max,{label,right,color,size,aria}={}) => `<div class="progress-bar ${size?'progress-bar--'+size:''} ${color?'progress-bar--'+color:''}" role="progressbar" aria-valuenow="${val}" aria-valuemin="0" aria-valuemax="${max}" ${aria||label?`aria-label="${esc(aria||label)}"`:''}>${label!=null?`<span class="progress-bar__label">${label}</span>`:'<span></span>'}${right!=null?`<span class="progress-bar__output">${right}</span>`:'<span></span>'}<div class="progress-bar__track"><div class="progress-bar__fill" style="width:${pct(val,max)}%"></div></div></div>`;
 const meter = (val,max,{label,right,color,size}={}) => `<div class="meter ${size?'meter--'+size:''} ${color?'meter--'+color:''}" role="meter" aria-valuenow="${val}" aria-valuemin="0" aria-valuemax="${max}" aria-label="${esc(label||'')}"><span class="meter__label">${label||''}</span><span class="meter__output">${right||''}</span><div class="meter__track"><div class="meter__fill" style="width:${pct(val,max)}%"></div></div></div>`;
 const ring = (val,max,{size=120,stroke=10,color='accent',inner=''}={}) => { const r=(size-stroke)/2, C=2*Math.PI*r, p=Math.max(0,Math.min(1,val/max)); return `<div class="progress-circle" style="width:${size}px;height:${size}px;--stroke:var(--${color})" role="progressbar" aria-valuenow="${val}" aria-valuemin="0" aria-valuemax="${max}"><svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true"><circle class="progress-circle__track" cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke-width="${stroke}"/><circle class="progress-circle__fill" style="--C:${C}" cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke-width="${stroke}" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-p)}" transform="rotate(-90 ${size/2} ${size/2})"/></svg><div class="progress-circle__value">${inner}</div></div>`; };
@@ -35,6 +37,91 @@ const stat = (label,value,{small,right,foot,count}={}) => {
   : `<div class="card stat"><div class="stat__label"><span>${label}</span>${right||''}</div><div class="stat__value">${val}${small?`<small>${small}</small>`:''}</div>${foot||''}</div>`; };
 const tile = (ic,color='default',size='') => `<span class="icon-tile icon-tile--${color} ${size?'icon-tile--'+size:''}">${icon(ic,size==='sm'?14:size==='lg'||size==='xl'?22:18)}</span>`;
 const skillTile = (skill,size='') => `<span class="icon-tile icon-tile--tint tint-${skill||'mock'} ${size?'icon-tile--'+size:''}">${icon(skill?SKILL_ICON[skill]:'graduation-cap',size==='sm'?14:size==='lg'?22:18)}</span>`;
+/* Distinct icon per TOEIC Part / IELTS question type (catalog tiles, studio navigator). */
+const PART_ICON = {P1:'picture',P2:'comments',P3:'persons',P4:'microphone',P5:'font',P6:'file-text',P7:'files',L1:'square-dashed-text',L2:'map-pin',L3:'list-check',L4:'pencil',R1:'check-double',R2:'list-ul',R3:'link'};
+const TYPE_ICON = {'reading.tfng':'check-double','reading.headings':'list-ul','reading.completion':'text','reading.matching_features':'link','reading.multi':'list-check','listening.form':'square-dashed-text','listening.map':'map-pin','listening.multi':'list-check','listening.notes':'pencil'};
+/** Skill-tinted icon tile with an arbitrary icon (Part / question-type tiles) */
+const tintTile = (ic,skill,size='') => `<span class="icon-tile icon-tile--tint tint-${skill||'mock'} ${size?'icon-tile--'+size:''}">${icon(ic,size==='sm'?14:size==='lg'?22:18)}</span>`;
+
+/* ---------- Exam cover art ----------
+ * Generated (no stock imagery): skill-tinted gradient (tokens only) + motif per kind/track/skill + big translucent label + provenance badge.
+ * spec = {track:'toeic'|'ielts'|'personal', skill:'listening'|'reading'|'mixed'|'writing'|'speaking', kind, label:'04', origin:'official'|'community'|'tenant'|'personal', author?:PEOPLE key, tenant?:TENANTS key} */
+const COVER_SKIP = /^(TOEIC|IELTS|ETS|IDP|L&R)$/;
+function coverLabel(title){
+  const t = String(Array.isArray(title) ? (title[1]??title[0]) : title||'');
+  let m;
+  if ((m=t.match(/Part\s*(\d)/i))) return 'P'+m[1];
+  if ((m=t.match(/Task\s*(\d)/i))) return 'T'+m[1];
+  if ((m=t.match(/(\d+)\s*$/))) return m[1].padStart(2,'0');
+  const acr = (t.match(/\b[A-Z]{3,5}\b/g)||[]).find(w=>!COVER_SKIP.test(w)); if (acr) return acr;
+  if ((m=t.match(/(\d+\+?)/))) return m[1];
+  const seg = t.split(/[:·—]/).pop().trim().split(/\s+/).filter(w=>/^[A-Za-zÀ-ỹ]/.test(w));
+  return (seg.slice(0,2).map(w=>w[0]).join('')||'E').toUpperCase();
+}
+/** Cover spec from a S.content row (Studio, moderation, contribute) */
+function coverSpec(item){
+  return {track:String(item.exam||'').startsWith('ielts')?'ielts':'toeic', skill:item.skill||'mixed', kind:item.kind||'practice_set', label:coverLabel(item.title),
+    origin:item.origin==='community'?'community':item.scope&&item.scope!=='engrisk'?'tenant':'official', author:item.owner, tenant:item.scope};
+}
+const examSpec = id => { const ex=EXAMS[id]; if (!ex) return {track:'toeic',skill:'mixed',kind:'practice_set',label:'?',origin:'official'};
+  return {track:ex.track, skill:ex.kind==='personal_practice'?'personal':ex.skill||'mixed', kind:ex.kind, label:ex.cover||coverLabel(ex.title), origin:ex.kind==='personal_practice'?'personal':ex.origin||'official', author:ex.author, tenant:ex.tenant}; };
+const COVER_WAVE = [16,28,44,24,56,38,68,50,32,60,42,22,48,34,18,40,26,14];
+function coverArt(s){
+  const lines = (x,y,ws,step=9) => ws.map((w,i)=>`<rect class="cv-ink" x="${x}" y="${y+i*step}" width="${w}" height="4" rx="2"/>`).join('');
+  const wave = (x,y,n,k,gap=6,sc=1) => COVER_WAVE.slice(0,n).map((h,i)=>{ const hh=Math.max(4,h*sc); return `<rect class="${i<k?'cv-tint':'cv-soft'}" x="${x+i*gap}" y="${y-hh/2}" width="3.5" height="${hh}" rx="1.75"/>`; }).join('');
+  const ielts = s.track==='ielts', sk = s.skill;
+  if (sk==='listening' && ielts) /* IELTS listening: form completion card + audio strip */
+    return `<g transform="rotate(3 144 60)"><rect class="cv-paper" x="100" y="10" width="86" height="100" rx="7"/>
+      <rect class="cv-tint" x="110" y="20" width="40" height="6" rx="3"/>
+      ${[0,1,2,3].map(i=>`<rect class="cv-ink" x="110" y="${36+i*14}" width="${[22,28,18,24][i]}" height="4" rx="2"/><rect class="cv-dash" x="${142}" y="${32+i*14}" width="34" height="10" rx="3"/>`).join('')}
+      ${wave(112,98,11,5,6,.22)}</g>`;
+  if (sk==='listening') /* TOEIC listening: waveform with playhead */
+    return `${wave(82,60,18,8,6.2)}<rect class="cv-ink" x="80" y="59" width="114" height="2" rx="1"/><circle class="cv-tint" cx="${82+8*6.2-1.3}" cy="60" r="5"/><circle class="cv-paper" cx="${82+8*6.2-1.3}" cy="60" r="2"/>`;
+  if (sk==='reading' && ielts) /* IELTS reading: passage with lettered paragraphs + headings */
+    return `<g transform="rotate(3 144 60)"><rect class="cv-paper" x="98" y="8" width="90" height="104" rx="7"/>
+      <rect class="cv-tint" x="108" y="17" width="52" height="6" rx="3"/>
+      ${['A','B','C'].map((l,i)=>`<rect class="cv-tint" x="108" y="${31+i*26}" width="12" height="12" rx="3"/><text class="cv-tag" x="114" y="${40+i*26}" text-anchor="middle">${l}</text>${lines(126,31+i*26,[52,44,48].slice(0,i===2?2:3),7)}`).join('')}</g>`;
+  if (sk==='reading') /* TOEIC reading: page of text with a highlighted blank */
+    return `<g transform="rotate(-5 140 60)"><rect class="cv-paper cv-back" x="96" y="14" width="76" height="94" rx="7"/></g>
+      <g transform="rotate(3 146 60)"><rect class="cv-paper" x="106" y="10" width="80" height="100" rx="7"/>
+      <rect class="cv-tint" x="115" y="19" width="36" height="6" rx="3"/>${lines(115,34,[60,52])}
+      <rect class="cv-ink" x="115" y="52" width="20" height="4" rx="2"/><rect class="cv-dash" x="138" y="49" width="24" height="10" rx="3"/><rect class="cv-ink" x="165" y="52" width="12" height="4" rx="2"/>
+      ${lines(115,68,[58,62,40])}</g>`;
+  if (sk==='writing')
+    return `<g transform="rotate(3 144 60)"><rect class="cv-paper" x="102" y="10" width="82" height="100" rx="7"/>${lines(112,22,[54,62,58,62,36,48,30],10)}</g>
+      <g transform="rotate(-38 150 70)"><rect class="cv-tint" x="146" y="34" width="9" height="62" rx="3"/><path class="cv-ink" d="M146 96h9l-4.5 9z"/></g>`;
+  if (sk==='speaking')
+    return `<path class="cv-paper" d="M104 22h76a8 8 0 0 1 8 8v44a8 8 0 0 1-8 8h-48l-14 14v-14h-14a8 8 0 0 1-8-8v-44a8 8 0 0 1 8-8z"/>${wave(116,52,10,6,6.4,.5)}`;
+  if (sk==='personal')
+    return `<g transform="rotate(3 144 60)"><rect class="cv-paper" x="104" y="12" width="80" height="96" rx="7"/><rect class="cv-tint" x="113" y="21" width="30" height="6" rx="3"/>${lines(113,36,[60,54,62,40,56,48],10)}</g>`;
+  /* Full mock (mixed L+R): stacked answer sheets, bubble grid, L/R section bars */
+  const ans=[1,3,0,2,1,3];
+  return `<g transform="rotate(-7 128 62)"><rect class="cv-paper cv-back" x="90" y="16" width="70" height="92" rx="7"/></g>
+    <g transform="rotate(4 146 60)"><rect class="cv-paper" x="108" y="8" width="78" height="104" rx="7"/>
+    <rect class="cv-ink" x="117" y="17" width="34" height="5" rx="2.5"/>
+    ${ans.map((a,r)=>[0,1,2,3].map(c=>`<circle class="${c===a?'cv-tint':'cv-ring'}" cx="${124+c*14}" cy="${33+r*10}" r="3.4"/>`).join('')).join('')}
+    <rect class="cv-l" x="117" y="96" width="26" height="6" rx="3"/><rect class="cv-r" x="146" y="96" width="31" height="6" rx="3"/></g>`;
+}
+function coverBadge(s,compact){
+  if (s.origin==='community'){ const p=PEOPLE[s.author];
+    return compact ? `<span class="cover__mark cover__mark--community">${icon('persons',9)}</span>`
+      : `<span class="cover__badge"><span class="cover__av avatar--${p?p.color:'accent'}">${esc(p?p.initials:'?')}</span>${T('Cộng đồng','Community')}</span>`; }
+  if (s.origin==='tenant'){ const t=TENANTS[s.tenant]||TENANTS.sunrise;
+    return compact ? `<span class="cover__mark cover__mark--tenant">${t.mark}</span>` : `<span class="cover__badge"><span class="cover__av cover__av--tenant">${t.mark}</span>${esc(t.name)}</span>`; }
+  if (s.origin==='personal') return compact ? '' : `<span class="cover__badge">${icon('folder',12)}${T('Của bạn','Yours')}</span>`;
+  return compact ? '' : `<span class="cover__badge">${icon('shield-check',12)}Engrisk Original</span>`;
+}
+/** Cover art HTML for an EXAMS id or a spec (decorative; provenance is repeated in text by callers). */
+function examCover(idOrSpec,{h=120,compact=false}={}){
+  const s = typeof idOrSpec==='string' ? examSpec(idOrSpec) : {track:'toeic',skill:'mixed',kind:'practice_set',label:'',origin:'official',...idOrSpec};
+  const tint = s.skill==='mixed'||!s.skill ? 'mock' : s.skill, label=String(s.label||'');
+  const fs = Math.round(h*(compact?(label.length<=2?.46:label.length===3?.36:.3):(label.length<=2?.74:label.length===3?.56:.44)));
+  const w = compact ? Math.round(h*1.36) : null;
+  return `<div class="cover ${compact?'cover--compact':''} tint-${tint}" style="--cover-h:${h}px;${w?`--cover-w:${w}px;`:''}" aria-hidden="true">
+    <span class="cover__label" style="font-size:${fs}px">${esc(label)}</span>
+    <svg class="cover__art" viewBox="0 0 200 120" preserveAspectRatio="${compact?'xMidYMid slice':'xMaxYMid meet'}" aria-hidden="true">${coverArt(s)}</svg>
+    ${coverBadge(s,compact)}</div>`;
+}
 const kbd = k => `<kbd class="kbd">${k}</kbd>`;
 const switchEl = (on,action,label) => `<button type="button" class="switch" role="switch" aria-checked="${on}" data-action="${action}" data-fk="${action}" aria-label="${esc(label)}"><span class="switch__control"><span class="switch__thumb"></span></span></button>`;
 

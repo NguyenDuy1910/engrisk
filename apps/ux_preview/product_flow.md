@@ -6,9 +6,10 @@
 > |---|---|
 > | `apps/ux_preview/product_flow.md` (tài liệu này) | Hành vi sản phẩm, hành trình, màn hình, quy tắc thi, AI, RBAC, roadmap |
 > | `apps/ux_preview/ux-preview.html` (+ `styles/*.css`, `scripts/*.js`) | Prototype tương tác (Web + Mobile, VI/EN, 5 theme preset) — mở trực tiếp bằng trình duyệt, không cần build |
-> | `apps/ux_preview/ux_spec.md` | Quy tắc đặt component, feature flow F1–F14, behavior chuẩn, khung mở rộng, journey map, heuristic review, kế hoạch usability test |
+> | `apps/ux_preview/ux_spec.md` | Quy tắc đặt component, feature flow F1–F16, behavior chuẩn, khung mở rộng, journey map, heuristic review, kế hoạch usability test |
 > | `apps/ux_preview/exam_practice_spec.md` | Thiết kế chi tiết luyện đề & phòng thi TOEIC/IELTS: thư viện đề, thiết lập, test player, công cụ, kết quả, xem lại |
-> | `backend/docs_design/schema.dbml` | Mô hình dữ liệu PostgreSQL (34 bảng, 6 domain) |
+> | `apps/ux_preview/content_studio_spec.md` | Hệ sinh thái nội dung: bìa/icon catalog, Content Studio (platform + tenant), nhập gói, audio & script, đóng góp cộng đồng, kiểm duyệt, pháp lý |
+> | `backend/docs_design/schema.dbml` | Mô hình dữ liệu PostgreSQL (41 bảng, 7 domain) |
 >
 > Trạng thái: **đề xuất thiết kế để product review**, chưa phải cam kết triển khai. Nhãn giai đoạn `P1`…`P4` dùng thống nhất trong mọi file.
 
@@ -68,7 +69,16 @@ flowchart LR
     H --- PR[progress] --- PF[profile]
     PF --> LIB[library]
     PF --> ORG[org]
+    PF --> CO[contribute]
   end
+  subgraph Content["Nội dung (giáo viên · content admin)"]
+    ST[studio] --> ED[studio-editor]
+    ST --> IM[studio-import] --> ED
+    ST --> MOD[moderation]
+  end
+  CO -->|Bắt đầu / Sửa theo góp ý| ED
+  ED -->|Gửi duyệt| MOD
+  MOD -->|Duyệt & xuất bản| CAT
   L -->|Luyện thử 5 phút| EX
   ON --> H
 ```
@@ -78,7 +88,9 @@ flowchart LR
 | Trang chủ | `home` | Tab “Trang chủ” |
 | Luyện tập | `catalog` → `exam-intro` | Tab “Luyện tập” |
 | AI Tutor | `tutor` | Tab “AI Tutor” |
-| Tài liệu (P3) | Mục riêng trên sidebar | Trong tab “Tôi” → Tài liệu của tôi |
+| Tài liệu (P3) | Nhóm “Thư viện” trên sidebar | Trong tab “Tôi” → Tài liệu của tôi |
+| Đóng góp đề (P3, học viên đã đăng ký) | Nhóm “Thư viện” → `contribute` | Tab “Tôi” → Đóng góp đề |
+| Nội dung (P3 platform / P4 tenant, chỉ staff) | Nhóm “Nội dung” **thay** nhóm “Thư viện”: `studio` · `moderation` (badge = số bài chờ duyệt trong tenant hiện tại) | Tab “Tôi” → Content Studio / Kiểm duyệt (giám sát + duyệt; soạn trên Web) |
 | Tiến độ | `progress` (+ `results`, `review`) | Tab “Tiến độ” |
 | Tài khoản | `profile` | Tab “Tôi” |
 | Ngữ cảnh tổ chức (P4) | Nút tenant ở đầu sidebar → `org` | Tab “Tôi” → Tổ chức |
@@ -168,7 +180,8 @@ sequenceDiagram
 
 ### D5. Chọn bài (catalog)
 - Bộ lọc: Kỳ thi (TOEIC/IELTS) → Loại (Tất cả / Luyện ngắn / Thi thử) → Kỹ năng (chip toggle).
-- Thẻ bài: loại, kỹ năng, thời lượng, số câu, độ khó (Dễ/Trung bình/Khó), khóa (Cần tài khoản / Premium · tương lai / Sắp ra mắt).
+- Thẻ bài: **ảnh bìa** (motif theo loại/kỹ năng + badge nguồn gốc Engrisk Original / tenant / cộng đồng), loại, kỹ năng, thời lượng, số câu, độ khó (Dễ/Trung bình/Khó), ★ + lượt làm, khóa (Cần tài khoản / Premium · tương lai / Sắp ra mắt). Tile Part/dạng câu có icon riêng.
+- Section mới: “Từ Sunrise English” (chỉ khi đang ở tenant tổ chức, trên đề đầy đủ) và “Từ cộng đồng” (cuối trang + tab loại “Cộng đồng”; chip “Đã kiểm duyệt”, tác giả, ★, giấy phép, nút “Đóng góp đề”). Chi tiết `exam_practice_spec.md` §3, `content_studio_spec.md` §4.
 - **Luyện ngắn**: bấm “Bắt đầu” → vào `exam` ngay (không qua intro). **Thi thử**: “Xem đề” → `exam-intro` (quy tắc phòng thi cần đọc trước).
 - Empty: “Chưa có bài phù hợp” + giải thích (ví dụ TOEIC L&R không có Writing) + “Xóa bộ lọc”. Error: Alert + Thử lại.
 
@@ -244,6 +257,55 @@ flowchart LR
 - Nhận lời mời (email/link) → `org` hiển thị tổ chức, vai trò, cam kết quyền riêng tư (“tiến độ cá nhân không chia sẻ với trung tâm”) → Tham gia / Từ chối.
 - Tham gia → membership + vai trò → chuyển ngữ cảnh (đổi `active_tenant_id`) → giao diện đổi màu/logo theo tenant → thấy “Bài của trung tâm” + “Thư viện Engrisk (cấp phép)”.
 
+### D13. Cộng đồng đóng góp đề (P3 · journey L trong prototype)
+- **Entry point:** sidebar “Thư viện → Đóng góp đề”, nút “Đóng góp đề” ở section “Từ cộng đồng” của `catalog`, thông báo trạng thái duyệt. Khách → `auth` (chuyển đổi) trước.
+- **Intent:** “Tôi giỏi Part 5, muốn soạn bộ luyện giúp người khác và được ghi công.”
+- **Actions:** đọc chính sách (nội dung gốc, giấy phép, SLA 3–5 ngày) → chọn loại (TOEIC Reading Part 5/6/7, TOEIC Listening Part 1–4 có audio + script, IELTS Academic passage; Full mock mở khóa sau 3 bộ đã xuất bản) → soạn trong `studio-editor` chế độ contributor (Web) → tab Kiểm tra: 0 lỗi chặn → chọn giấy phép + cam kết → **Gửi duyệt**.
+```mermaid
+flowchart LR
+  G[Khách] -->|Tạo tài khoản| CO[contribute]
+  CO -->|Bắt đầu đóng góp| ED["studio-editor (contributor)"]
+  ED -->|0 lỗi chặn + giấy phép + cam kết| SUB[content_submissions: submitted]
+  SUB -->|auto-checks| Q{Trùng khớp / bản quyền?}
+  Q -->|chặn| REJ[rejected + lý do]
+  Q -->|ok| REV[in_review: người duyệt ≠ người gửi]
+  REV -->|Yêu cầu chỉnh sửa + góp ý neo câu| CR[changes_requested]
+  CR -->|Sửa theo góp ý, xử lý hết góp ý| SUB
+  REV -->|Duyệt & xuất bản| PUB[Xuất bản: provenance=community, visibility=public, exam_credits]
+  REV -->|Từ chối| REJ
+  REJ -->|Kháng nghị 1 lần / 14 ngày| SUB
+  PUB --> CAT["catalog: Từ cộng đồng (★, lượt làm, ghi công)"]
+```
+- **System:** bản nháp là `exams(provenance = community, visibility = private, owner_user_id)` + `exam_revisions(draft)` trong platform tenant; gửi duyệt tạo `content_submissions` (một submission đang hoạt động/đề) với `license`, `rights_confirmed_at`, `auto_checks` (`ai_runs: originality_check`), `sla_due_at`.
+- **Trạng thái người học thấy:** pipeline Nháp → Gửi duyệt → Đang duyệt → Xuất bản; “Cần chỉnh sửa” kèm góp ý của người duyệt; “Đã xuất bản” kèm lượt làm + ★. Không leaderboard, không streak.
+- **Mobile:** theo dõi trạng thái, trả lời góp ý, gửi duyệt nháp đã đủ; soạn mới → “Tiếp tục trên máy tính”.
+- Chi tiết: `content_studio_spec.md` §11–§13.
+
+### D14. Content Studio — admin platform & tenant (P3 platform · P4 tenant · journey M trong prototype)
+- **Entry point:** sidebar nhóm “Nội dung” (thay “Thư viện” với staff) → `studio`; badge “Kiểm duyệt” → `moderation`. Phạm vi = tenant đang hoạt động (Platform → catalog công khai; Sunrise → chỉ thành viên).
+- **Intent:** content admin “đưa TOEIC Test 04 lên catalog đúng chuẩn”; giáo viên “tạo bài Part 5 cho lớp tối nay”; người duyệt “xử lý hàng đợi đúng SLA”.
+- **Actions:**
+  1. `studio`: KPI + Việc cần làm (lỗi chặn, bài quá SLA, gói nhập lỗi, báo lỗi từ người học) → bảng nội dung có lọc.
+  2. Tạo đề mới (chọn mẫu cấu trúc) **hoặc** `studio-import`: Chuẩn bị gói → Tải lên (quyền sử dụng + xác nhận) → Kiểm tra (bảng lỗi dòng·cột·mã·cách sửa, ghép audio/ảnh) → Tạo bản nháp (bỏ qua dòng lỗi; mở trình soạn ở tab Kiểm tra).
+  3. `studio-editor`: Tổng quan (thông tin, bìa, phát hành, ghi công) → Cấu trúc → Audio & Script (QC −16 LUFS ±1, true peak ≤ −1 dBTP, 44.1/48 kHz; tự căn chỉnh cue; script được bảo vệ) → Câu hỏi (3 cột: điều hướng · biên tập · xem trước) → Kiểm tra & xuất bản (contributor: Kiểm tra & gửi duyệt) — lỗi chặn/cảnh báo, diff, ghi chú phát hành, lịch, tác động.
+  4. Xuất bản ngay / lên lịch (content admin: công khai; giáo viên: “Xuất bản cho lớp”, `visibility = tenant`).
+  5. `moderation`: hàng đợi (Chờ duyệt · Cần sửa · Đã xử lý; nguồn Cộng đồng/Giáo viên/Nội bộ; SLA) → chi tiết (Nội dung · Kiểm tra tự động · Lịch sử) → checklist 6 mục → Duyệt & xuất bản / Yêu cầu chỉnh sửa / Từ chối (lý do).
+```mermaid
+flowchart LR
+  ST[studio] -->|Tạo đề mới| ED[studio-editor: draft]
+  ST -->|Nhập gói đề| IM[studio-import] -->|validated| ED
+  IM -->|lỗi| FIX[Sửa gói, tải lại] --> IM
+  ED -->|0 lỗi chặn| PUBQ{Vai trò}
+  PUBQ -->|content.publish| PUB[published / scheduled]
+  PUBQ -->|content.publish_tenant| PUBT[published, visibility=tenant]
+  PUB --> CAT[catalog]
+  PUBT --> CATT["catalog: Từ Sunrise English"]
+  ST -->|Chờ duyệt| MOD[moderation] -->|Duyệt| PUB
+```
+- **System:** revision đã xuất bản bất biến; sửa = revision nháp mới (`based_on_revision_id`); xuất bản chuyển `exams.current_revision_id`, revision cũ `retired`, attempt đang làm giữ revision cũ. Không ai duyệt bài của chính mình.
+- **Mobile:** giám sát (KPI, việc cần làm, danh sách card), duyệt với thanh quyết định sticky, trả lời góp ý; soạn/nhập gói chỉ trên Web (“Soạn trên máy tính”).
+- Chi tiết: `content_studio_spec.md` §5–§10, §12–§14.
+
 ---
 
 ## E. Screen inventory
@@ -256,7 +318,7 @@ Mã màn hình = `id` trong registry `SCREENS` của `ux-preview.html`. Trạng 
 | `auth` (P1) | Đăng nhập/đăng ký/chuyển đổi khách | Đăng nhập / Tạo tài khoản | Google, quên mật khẩu, tiếp tục là khách | — | `users`, `auth_identities`, `auth_sessions`, `auth_tokens`, `tenant_memberships`, `membership_roles` | Input 48px, font 16px (tránh zoom iOS) |
 | `onboarding` (P1) | Thu mục tiêu tối thiểu | Tiếp tục / Hoàn tất | Bỏ qua, Quay lại | Thang điểm theo kỳ thi | `learner_goals`, `exam_types.score_scale` | Thẻ lựa chọn ≥ 60px |
 | `home` (P1) | Một hành động tiếp theo | Tiếp tục / Bắt đầu (gợi ý) | Chọn bài khác, Luyện kỹ năng yếu | Attempt đang làm, gợi ý, mục tiêu, phút/tuần, kỹ năng | `attempts`, `learner_goals`, `learner_skill_stats`, `attempt_scores`, `exams` | Web: 2 cột; Mobile: xếp chồng theo ưu tiên |
-| `catalog` (P1) | Thư viện “Luyện đề” | Làm đề / Bắt đầu | Tab TOEIC/IELTS, lọc loại (đề đầy đủ / theo Part hoặc dạng câu / bài ngắn), tìm kiếm, tiếp tục bài dở | Đề + revision hiện hành, lịch sử & độ chính xác theo Part | `exams`, `exam_revisions.sections`, `attempts`, `learner_skill_stats`, `exam_licenses` (P4) | Web lưới 3–4 cột; Mobile 1–2 cột |
+| `catalog` (P1) | Thư viện “Luyện đề” | Làm đề / Bắt đầu | Tab TOEIC/IELTS, lọc loại (đề đầy đủ / theo Part hoặc dạng câu / bài ngắn / cộng đồng), tìm kiếm, tiếp tục bài dở, Đóng góp đề (P3) | Đề + revision hiện hành, bìa + nguồn gốc, ★ + lượt làm, lịch sử & độ chính xác theo Part | `exams` (`cover_style`, `cover_asset_id`, `provenance`), `exam_revisions.sections`, `exam_credits`, `exam_ratings`, `attempts`, `learner_skill_stats`, `exam_licenses` (P4) | Web lưới 3–4 cột; Mobile 1–2 cột, bìa thấp hơn |
 | `exam-intro` (P1) | Thiết lập bài làm | Bắt đầu thi thử / Bắt đầu luyện / Tiếp tục | Chọn chế độ, chọn Part, giới hạn thời gian, hỗ trợ luyện tập, kiểm tra âm thanh, lịch sử đề | Sections + parts, thời lượng, attempt đang làm, lịch sử | `exam_revisions.sections`, `attempts(settings)`, `attempt_scores` | Web: cột tóm tắt sticky; Mobile: CTA sticky dưới |
 | `exam` (P1) | Phòng thi TOEIC (đề + phiếu trả lời) / IELTS trên máy tính | Tiếp / Nộp bài | Đánh dấu, loại trừ phương án, highlight & ghi chú, cỡ chữ/màu nền, ẩn màn hình, tạm dừng (practice), kiểm tra trang (practice) | Câu hỏi đã ẩn đáp án, response, timer theo phần, track audio | `attempts`, `attempt_responses`, `attempt_annotations`, `exam_revision_items`, `questions`, `question_groups`, `content_assets` | Web split + phiếu/thanh câu; Mobile 1 cột, Tabs văn bản/câu, bottom sheet phiếu |
 | `writing` (P2) | IELTS Writing | Nộp bài | Bài mẫu (demo), Viết lại, Hỏi AI | Đề, nội dung đã lưu, đánh giá | `attempts`, `attempt_responses`, `evaluations`, `ai_runs` | Mobile: chọn chế độ phù hợp màn hình nhỏ |
@@ -268,8 +330,13 @@ Mã màn hình = `id` trong registry `SCREENS` của `ux-preview.html`. Trạng 
 | `progress` (P1) | Xu hướng & lịch sử | Luyện (theo kỹ năng) | Mở kết quả cũ, tiếp tục bài dở | Điểm theo thời gian, kỹ năng, attempts | `attempts`, `attempt_scores`, `learner_skill_stats`, `skills` | Web bảng; Mobile danh sách |
 | `profile` (P1) | Tài khoản, mục tiêu, ngữ cảnh | Chỉnh sửa mục tiêu | Liên kết Google, đổi tổ chức, nhắc học, đăng xuất, xóa tài khoản | Hồ sơ, identities, memberships, preferences | `users` (+`preferences`), `auth_identities`, `learner_goals`, `tenant_memberships`, `auth_sessions` | Mobile: tab “Tôi” chứa Tài liệu & Tổ chức |
 | `org` (P4) | Trải nghiệm học viên trong tổ chức | Tham gia | Từ chối, chuyển ngữ cảnh, chọn màu thương hiệu (admin) | Tenant, lời mời, nội dung tenant, giấy phép, entitlements | `tenants.branding`, `tenant_invitations`, `tenant_memberships`, `membership_roles`, `exam_licenses`, `tenant_entitlements` | Không phải bảng quản trị doanh nghiệp |
+| `contribute` (P3) | Học viên đóng góp bộ đề gốc, theo dõi duyệt | Bắt đầu đóng góp | Tiếp tục soạn, Sửa theo góp ý, Rút lại, Kháng nghị, xem chính sách & giấy phép | Đóng góp của tôi + trạng thái, góp ý người duyệt, số liệu tác động, hồ sơ ghi công | `content_submissions`, `submission_reviews`, `review_comments`, `exams`, `exam_credits`, `exam_ratings` | Mobile: theo dõi + trả lời + gửi duyệt; soạn trên máy tính |
+| `studio` (P3 platform · P4 tenant) | Thư viện nội dung theo phạm vi tenant | Tạo đề mới | Nhập gói đề, lọc trạng thái/kỳ thi/nguồn, việc cần làm, lưu trữ | Đề, revision, trạng thái, hoàn thiện, việc cần làm | `exams`, `exam_revisions`, `content_import_jobs`, `content_submissions`, `exam_credits` | Web bảng; Mobile KPI + việc cần làm + card list |
+| `studio-editor` (P3) | Soạn một revision: thông tin & bìa, cấu trúc, audio & script, câu hỏi, kiểm tra | Xuất bản / Xuất bản cho lớp / Gửi duyệt (theo vai trò) | Xem trước, Lên lịch, Tự căn chỉnh, Chuẩn hóa loudness, góp ý | Revision nháp, câu hỏi, audio QC, cue, script, checklist | `exams`, `exam_revisions`, `exam_revision_items`, `revision_audio_tracks`, `question_groups`, `questions`, `question_skills`, `content_assets`, `ai_runs` | Chỉ Web; Mobile chỉ xem + “Soạn trên máy tính” |
+| `studio-import` (P3) | Nhập gói ZIP + manifest Excel/JSON | Kiểm tra gói → Tạo bản nháp | Tải mẫu, tải báo cáo lỗi CSV, tải lại | Job, tóm tắt, lỗi theo dòng, ghép file | `content_import_jobs`, `content_assets(import_package)`, `question_groups`, `questions`, `revision_audio_tracks` | Chỉ Web |
+| `moderation` (P3) | Hàng đợi kiểm duyệt cộng đồng / giáo viên | Duyệt & xuất bản | Yêu cầu chỉnh sửa, Từ chối (lý do), góp ý neo câu, nhận/trả bài | Submission, kiểm tra tự động, checklist, lịch sử vòng | `content_submissions`, `submission_reviews`, `review_comments`, `questions`, `revision_audio_tracks`, `ai_runs` | Mobile: danh sách → chi tiết + thanh quyết định sticky |
 
-**Trạng thái được minh họa:** loading (`home`, `catalog`, `progress`, `results`, `auth`), empty (`home`, `catalog`, `progress`, `tutor`, `library`), error (`home`, `catalog`, `auth`, `exam` offline, `writing`, `tutor`, `library`), quota (`tutor`), disabled (Tiếp tục ở onboarding, tải lên khi chưa xác nhận quyền, nút Kiểm tra khi chưa trả lời, bài Premium/Sắp ra mắt), confirmation (nộp bài, lưu & thoát, nộp Writing ngắn, xóa tài khoản), completed (kết quả, toast).
+**Trạng thái được minh họa:** loading (`home`, `catalog`, `progress`, `results`, `auth`, `studio`), empty (`home`, `catalog`, `progress`, `tutor`, `library`, `contribute`, `studio`, `moderation`), error (`home`, `catalog`, `auth`, `exam` offline, `writing`, `tutor`, `library`, `studio`, `studio-import`), quota (`tutor`), disabled (Tiếp tục ở onboarding, tải lên khi chưa xác nhận quyền, nút Kiểm tra khi chưa trả lời, bài Premium/Sắp ra mắt, Xuất bản/Gửi duyệt khi còn lỗi chặn, Duyệt khi checklist chưa đủ), confirmation (nộp bài, lưu & thoát, nộp Writing ngắn, xóa tài khoản, xuất bản, từ chối), completed (kết quả, toast).
 
 ---
 
@@ -346,10 +413,10 @@ Mã màn hình = `id` trong registry `SCREENS` của `ux-preview.html`. Trạng 
 ### Vai trò & quyền
 | Vai trò | Scope | Ở đâu | Quyền chính (ví dụ permission key) | Giai đoạn |
 |---|---|---|---|---|
-| learner (Student/Member) | tenant | Mọi người dùng trong tenant | `exam.take`, `attempt.read_own`, `tutor.use`, `material.upload_own` | P1 |
-| content_manager | tenant | Đội nội dung Engrisk **trong platform tenant**; đội nội dung của tổ chức (P4) | `content.author`, `content.review`, `content.publish` | P1 |
-| teacher | tenant | Tổ chức | `evaluation.review`, `learner_progress.read` (trong tenant) | P4 |
-| tenant_admin | tenant | Tổ chức | `member.manage`, `role.assign`, `branding.manage`, `entitlement.read` | P4 |
+| learner (Student/Member) | tenant | Mọi người dùng trong tenant | `exam.take`, `attempt.read_own`, `tutor.use`, `material.upload_own`; P3: `submission.create` (đóng góp đề, chỉ người đã đăng ký) | P1 |
+| content_manager | tenant | Đội nội dung Engrisk **trong platform tenant**; đội nội dung của tổ chức (P4) | `content.author`, `content.publish`; P3: `content.import`, `content.review` | P1 |
+| teacher | tenant | Tổ chức | `evaluation.review`, `learner_progress.read` (trong tenant); `content.author`, `content.import`, `content.publish_tenant`, `content.review_tenant` | P4 |
+| tenant_admin | tenant | Tổ chức | `member.manage`, `role.assign`, `branding.manage`, `entitlement.read`, `content.review_tenant` | P4 |
 | platform_admin | platform | `platform_role_assignments` | `platform.tenant.manage`, `platform.license.grant` | P1 |
 | platform_support | platform | `platform_role_assignments` | `platform.support.read` (đọc có kiểm toán) | P1 |
 
@@ -358,6 +425,7 @@ Mã màn hình = `id` trong registry `SCREENS` của `ux-preview.html`. Trạng 
 - Vai trò platform **không** cấp qua membership (khóa bằng composite FK `(role_id, role_scope)`), nên học viên B2C trong platform tenant không bao giờ có quyền nhân viên.
 - Dữ liệu học tập (attempt, tutor, tài liệu riêng) chỉ chủ sở hữu đọc; teacher/admin của tổ chức chỉ đọc dữ liệu phát sinh **trong tenant đó** (P4, chi tiết ở mục M).
 - Content manager tổ chức không sửa được nội dung Engrisk được cấp phép.
+- **Không ai tự duyệt bài của mình** (CHECK `content_submissions.assigned_reviewer_user_id ≠ submitter_user_id` + service rule trên `submission_reviews`). `content.publish` (công khai) chỉ có hiệu lực trong platform tenant; giáo viên chỉ `content.publish_tenant` (`visibility = tenant`). Học viên không bao giờ xuất bản trực tiếp. Chi tiết: `content_studio_spec.md` §2.
 
 ---
 
@@ -410,9 +478,19 @@ Mã màn hình = `id` trong registry `SCREENS` của `ux-preview.html`. Trạng 
 | Upload material (P3) | `library` | INSERT `content_assets(source_material, pending_upload)` → `available`; INSERT `source_materials(rights_basis, rights_confirmed_at)` → `processing` → `ready/failed` |
 | Generate questions (P3) | `library` | INSERT `ai_runs(question_generation)`; INSERT `question_groups`, `questions(origin=ai_generated, status=draft, visibility=private, review_flags)`, `question_skills` |
 | Sửa / duyệt / từ chối nháp | `library` | UPDATE `questions` (draft sửa tại chỗ); duyệt → `status=published, reviewed_by_user_id`; từ chối → `archived` |
-| Publish question (nội dung chung) | công cụ nội dung (ngoài prototype) | `questions.status: in_review → published` bởi content_manager; sửa sau đó = dòng mới (`version+1`, `supersedes_id`) |
+| Publish question (nội dung chung) | `studio-editor` (P3) | `questions.status: in_review → published` khi revision chứa câu được xuất bản; sửa sau đó = dòng mới (`version+1`, `supersedes_id`) |
 | Tạo bộ luyện riêng (P3) | `library` | INSERT `exams(kind=personal_practice, visibility=private, owner_user_id)`, `exam_revisions`, `exam_revision_items` |
-| Publish exam | công cụ nội dung | INSERT `exam_revisions(status=published, question_count, max_points)`; UPDATE `exams.current_revision_id` |
+| Tạo đề / revision mới (P3) | `studio` → `studio-editor` | INSERT `exams(provenance, cover_style)` (đề mới) + `exam_revisions(status=draft, based_on_revision_id)`; clone `exam_revision_items`, `revision_audio_tracks` |
+| Soạn câu hỏi | `studio-editor` (Câu hỏi) | UPSERT `question_groups`, `questions`, `question_skills` (draft sửa tại chỗ; câu đã xuất bản → version mới); INSERT/UPDATE `exam_revision_items` |
+| Tải audio, QC, căn chỉnh cue, script | `studio-editor` (Audio & Script) | INSERT `content_assets(question_media)` → `available`; UPSERT `revision_audio_tracks(sample_rate_hz, loudness_lufs, true_peak_dbtp, qc, cues, script_segments)`; INSERT `ai_runs(audio_alignment)` |
+| Ảnh bìa | `studio-editor` (Tổng quan) | UPDATE `exams.cover_style`; tùy chọn INSERT `content_assets(exam_cover)` + `exams.cover_asset_id` |
+| Publish exam | `studio-editor` (Kiểm tra & xuất bản) | Checklist chặn = 0 → UPDATE `exam_revisions(status=published \| scheduled, publish_at, release_notes, question_count, max_points, published_by_user_id)`; UPDATE `exams.current_revision_id`; revision cũ → `retired` |
+| Nhập gói đề (P3) | `studio-import` | INSERT `content_assets(import_package)`, `content_import_jobs(rights_basis, rights_confirmed_at)` → `validating` → `validated/failed` (`summary`, `errors`) → “Tạo bản nháp”: INSERT `exams`, `exam_revisions`, `question_groups`, `questions(origin=imported)`, `exam_revision_items`, `revision_audio_tracks`; job `completed` |
+| Gửi duyệt đóng góp (P3) | `studio-editor` (contributor) / `contribute` | INSERT `content_submissions(status=submitted, license, rights_confirmed_at, sla_due_at)`; INSERT `ai_runs(originality_check)` → UPDATE `auto_checks` |
+| Duyệt / yêu cầu sửa / từ chối (P3) | `moderation` | INSERT `submission_reviews(decision, checklist, reason_code, summary)`, `review_comments`; UPDATE `content_submissions.status`; duyệt → publish revision + `exams.visibility=public` (cộng đồng) + INSERT `exam_credits` |
+| Sửa theo góp ý, gửi lại | `contribute` → `studio-editor` | UPDATE `review_comments.resolved_at`; UPDATE `content_submissions(status=submitted, round+1)` |
+| Đánh giá đề ★ / báo lỗi | `results` | UPSERT `exam_ratings(rating, issue_tags)` |
+| Xem catalog (bìa, nguồn gốc, cộng đồng, tenant) | `catalog` | SELECT `exams(provenance, cover_style, cover_asset_id)` ⋈ `exam_credits`; AVG/COUNT `exam_ratings`; section tenant theo `active_tenant_id` |
 | View progress | `home`, `progress` | SELECT `learner_skill_stats`, `attempt_scores` theo thời gian, `attempts.active_seconds` (phút/tuần) |
 | Liên kết Google | `profile` | INSERT `auth_identities(google)` |
 | Nhắc học | `profile` | UPDATE `users.preferences` |
@@ -427,7 +505,7 @@ Mã màn hình = `id` trong registry `SCREENS` của `ux-preview.html`. Trạng 
 | User | `users` | Định danh toàn cục |
 | Tenant | `tenants` | Tổ chức; P1 chỉ có platform tenant “Engrisk” |
 | Membership | `tenant_memberships` | User ∈ Tenant |
-| Role | `roles` (+ `permissions`, `role_permissions`, `membership_roles`, `platform_role_assignments`) | Không có màn hình trong prototype; seed từ code |
+| Role | `roles` (+ `permissions`, `role_permissions`, `membership_roles`, `platform_role_assignments`) | Không có màn hình quản trị; seed từ code. Prototype có công tắc “Vai trò” trên thanh công cụ |
 | Exam | `exams` + `exam_revisions` | “Bài”, “đề”, “practice set”, “mock” đều là Exam với `kind` khác nhau |
 | Question | `questions` (+ `question_groups` = đoạn văn/audio dùng chung) | |
 | Attempt | `attempts` | “Bài làm” |
@@ -436,6 +514,13 @@ Mã màn hình = `id` trong registry `SCREENS` của `ux-preview.html`. Trạng 
 | Content Asset | `content_assets` | Tệp nhị phân |
 | Source Material | `source_materials` | “Tài liệu của tôi” |
 | AI Run | `ai_runs` | Provenance của mọi output AI |
+| Provenance | `exams.provenance` | Nhãn tin cậy: Engrisk Original / Tenant / Cộng đồng / Đối tác |
+| Revision | `exam_revisions` | “Phiên bản” đề; đã xuất bản thì bất biến |
+| Audio track | `revision_audio_tracks` | Audio section + cue + script (transcript được bảo vệ) |
+| Submission | `content_submissions` (+ `submission_reviews`, `review_comments`) | “Bài gửi duyệt” — đóng góp cộng đồng hoặc của giáo viên |
+| Import job | `content_import_jobs` | “Gói nhập” |
+| Credit | `exam_credits` | “Ghi công” |
+| Rating | `exam_ratings` | ★ 1–5 mỗi người/đề |
 
 ---
 
@@ -445,7 +530,7 @@ Mã màn hình = `id` trong registry `SCREENS` của `ux-preview.html`. Trạng 
 - Web + Mobile: `landing`, `auth` (email, Google, khách + chuyển đổi), `onboarding`, `home`, `catalog`, `exam-intro`, `exam`, `results`, `review`, `progress`, `profile`.
 - Nội dung: TOEIC L&R (practice sets theo Part + full mock), IELTS Academic Reading (+ Listening nếu kịp nội dung).
 - AI Tutor giải thích câu sai, grounded trên đáp án kiểm duyệt, có hạn mức.
-- Công cụ nội dung nội bộ tối giản cho content_manager (ngoài phạm vi prototype).
+- Công cụ nội dung cho content_manager: P1 dùng bản tối giản (tạo/sửa/xuất bản); Content Studio đầy đủ ở P3. Bìa tạo tự động (`cover_style`) + icon Part/dạng câu thuộc P1 (chỉ UI).
 - Bảng: toàn bộ bảng gắn `[P1]` trong `schema.dbml`.
 
 ### Phase 2 — Personalization & richer exam practice
@@ -456,10 +541,13 @@ Mã màn hình = `id` trong registry `SCREENS` của `ux-preview.html`. Trạng 
 ### Phase 3 — AI-powered learning expansion
 - `library`: tải tài liệu, AI tạo câu hỏi riêng tư, duyệt, bộ luyện riêng.
 - AI hỗ trợ content team tạo nháp cho ngân hàng chung (vẫn qua duyệt).
+- **Content Studio (platform):** `studio`, `studio-editor` (audio & script, căn chỉnh cue, checklist xuất bản, lên lịch), `studio-import` (ZIP + manifest).
+- **Cộng đồng đóng góp + kiểm duyệt:** `contribute`, `moderation`, kiểm tra tính nguyên bản, ghi công, đánh giá ★, section “Từ cộng đồng” trên catalog. Bảng: `revision_audio_tracks`, `content_import_jobs`, `content_submissions`, `submission_reviews`, `review_comments`, `exam_credits`, `exam_ratings`.
 - Phân tích câu hỏi (độ khó thực tế, phương án nhiễu) từ `attempt_responses`.
 
 ### Phase 4 — Multi-tenant B2B
 - Tổ chức, lời mời, vai trò teacher/tenant_admin, branding, subdomain, entitlements theo gói, `exam_licenses`, SSO, giáo viên chấm lại Writing/Speaking, RLS.
+- **Content Studio cho tenant:** giáo viên soạn/nhập đề, “Xuất bản cho lớp” (`visibility = tenant`), duyệt nội bộ (`content.review_tenant`), section “Từ [tenant]” trên catalog; đề đối tác `provenance = licensed_partner`.
 - Chưa mô hình hóa (sẽ thiết kế khi cần): lớp học & giao bài (classes/assignments), billing/subscriptions, tenant_domains, báo cáo cho tổ chức.
 
 ---
@@ -480,6 +568,9 @@ Mã màn hình = `id` trong registry `SCREENS` của `ux-preview.html`. Trạng 
 | **RBAC đơn giản** | Roles + permissions + gán theo membership đủ cho mọi vai trò dự kiến; không cần policy engine | Quy tắc theo thuộc tính (ví dụ “giáo viên chỉ xem lớp mình”) sẽ cần bổ sung khi có lớp học |
 | **Không mô hình hóa sớm** | Classes/assignments, billing, recommendations log, analytics events, tenant domains, tags tự do — chưa có hành vi P1 cần chúng | Sẽ thêm bảng mới, không phải sửa bảng lõi |
 | **Một bảng `ai_runs`** | Provenance + trạng thái job + chi phí/hạn mức trong một chỗ; không có hệ thống `ai_questions` song song | Không lưu prompt thô — debug dựa vào log có thời hạn |
+| **Submission tách khỏi revision** | Đóng góp cộng đồng và nội dung nội bộ dùng **cùng** `exams`/`exam_revisions`/`questions`; quy trình duyệt nằm ở `content_submissions` + `submission_reviews` (nhật ký bất biến) nên không có “bảng đề cộng đồng” song song | Trạng thái hiển thị trong Studio phải suy ra từ 2 bảng (revision + submission) |
+| **Audio theo section + cue JSONB** (`revision_audio_tracks`) | Thi thử cần một bản ghi liên tục; cue/script nhỏ, đọc cùng revision, bất biến khi xuất bản | Không truy vấn SQL theo từng cue — không cần |
+| **Bìa tạo từ token (`cover_style`) thay vì ảnh** | Mọi đề có hình ngay, đúng 5 preset + dark + accent tenant, không tốn lưu trữ; ảnh tải lên là tùy chọn | Bìa ít “cá tính” hơn ảnh chụp; badge nguồn gốc luôn do hệ thống vẽ |
 | **Prototype HTML thuần** | Review nhanh, không build; tái tạo token HeroUI v3 thật (`variables.css`) và tên class BEM (`button--primary`, `chip--success`) | Không phải component React thật; animation/ARIA của React Aria chỉ được mô phỏng |
 
 ### Engrisk Theme trên HeroUI (nguồn sự thật: HeroUI Theme Builder)

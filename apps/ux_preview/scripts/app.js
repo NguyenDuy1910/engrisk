@@ -16,12 +16,19 @@ const initial = () => ({
       {id:'m2',title:'scan_lesson3.pdf',meta:['PDF · 6 trang · 3.1 MB','PDF · 6 pages · 3.1 MB'],rights:'own_work',status:'failed',reason:['Không trích xuất được văn bản (PDF dạng ảnh). Hãy tải bản có thể chọn chữ.','Couldn’t extract text (image-only PDF). Upload a version with selectable text.']}],
     gen:'idle',genFrom:null,drafts:[],personal:null,editing:null},
   org:{invite:'pending',accent:ORG_ACCENTS[0][2]}, notif:true, googleLinked:true,
+  role:'learner', content:JSON.parse(JSON.stringify(CONTENT_ITEMS)), studio:studioInitial(), contrib:communityInitial(),
   just:null, justChecked:null, _enter:false,
 });
 let S = initial();
 const isM = () => S.device==='mobile';
 const user = () => S.persona==='guest' ? {name:T('Khách','Guest'),first:T('bạn','there'),initials:'K',email:null,guest:true}
+  : S.role==='content_admin' ? {name:'Thảo Lê',first:'Thảo',initials:'TL',email:'thao.le@engrisk.vn',staff:true}
+  : S.role==='teacher' ? {name:'Hạnh Vũ',first:'Hạnh',initials:'HV',email:'hanh.vu@sunrise.edu.vn',staff:true}
   : S.persona==='new' ? {name:'An Trần',first:'An',initials:'AT',email:'an.tran@example.com'} : {name:'Minh Nguyễn',first:'Minh',initials:'MN',email:'minh.nguyen@example.com'};
+/** Permission check for the prototype role (mirrors permissions.key in schema.dbml). */
+const can = perm => !user().guest && ROLES[S.role].perms.includes(perm);
+/** Content scope = active tenant: engrisk → platform (public) library, sunrise → tenant library. */
+const contentScope = () => S.tenant;
 const viewState = scr => {
   const s=S.states[scr]; if (s) return s;
   if (S.persona!=='returning' && ['home','progress','tutor','library'].includes(scr)){
@@ -38,40 +45,90 @@ function toast(title,desc='',color='success'){
   document.getElementById('live').textContent=title;
   render(); setTimeout(()=>{ S.toasts=S.toasts.filter(t=>t.id!==id); render(); },3800);
 }
-function go(screen,opts={}){ if (S.screen!==screen) S.hist.push(S.screen); S.screen=screen; S.modal=null; S.sheet=null; S.langMenu=null; Object.assign(S,opts); render(true); }
+function go(screen,opts={}){ if (S.screen!==screen) S.hist.push(S.screen); S.screen=screen; S.modal=null; S.sheet=null; S.langMenu=null; S.navMenu=null; Object.assign(S,opts); render(true); }
 
 /* ---------- Shells ---------- */
 function brand(){ const t=TENANTS[S.tenant]; return `<div class="brand"><span class="brand__mark">${t.mark}</span><span class="truncate">${t.name}</span></div>`; }
-const NAV_LEARN = () => [['home','house',T('Trang chủ','Home')],['catalog','book-open',T('Luyện tập','Practice')],['tutor','sparkles','AI Tutor'],['progress','chart-column',T('Tiến độ','Progress')]];
-const MNAV = () => [['home','house',T('Trang chủ','Home')],['catalog','book-open',T('Luyện tập','Practice')],['tutor','sparkles','AI Tutor'],['progress','chart-column',T('Tiến độ','Progress')],['profile','person',T('Tôi','Me')]];
-const navItem = (id,ic,l,cur,extra='') => `<button type="button" class="sidebar__item" data-action="go" data-to="${id}" data-fk="nav:${id}" ${cur===id?'aria-current="page"':''}>${icon(ic)}<span>${l}</span>${extra}</button>`;
+const NAV_LEARN = () => [['home','house',T('Trang chủ','Home')],['catalog','book-open',T('Luyện đề','Practice tests')],['tutor','sparkles','AI Tutor'],['progress','chart-column',T('Tiến độ','Progress')]];
+const NAV_CONTENT = () => [['studio','layers','Content Studio'],['moderation','shield-check',T('Kiểm duyệt','Review queue')]];
+const reviewCount = () => S.content.filter(c=>c.scope===contentScope()&&c.status==='in_review').length;
+const MNAV = () => [['home','house',T('Trang chủ','Home')],['catalog','book-open',T('Luyện đề','Practice')],['tutor','sparkles','AI Tutor'],['progress','chart-column',T('Tiến độ','Progress')],['profile','person',T('Tôi','Me')]];
+const navItem = (id,ic,l,cur,extra='') => `<button type="button" class="sidebar__item" data-action="go" data-to="${id}" data-fk="nav:${id}" ${cur===id?'aria-current="page"':''} title="${esc(l)}">${icon(ic)}<span class="sidebar__label">${l}</span>${extra}</button>`;
+const NOTIFS = () => [
+  ['clock','warning',T('Bài thi thử đang dở','Mock test in progress'),T('TOEIC Test 01 · Reading còn 38 phút — đồng hồ vẫn chạy.','TOEIC Test 01 · 38 min left in Reading — the clock is running.'),'resume'],
+  ['envelope','accent',T('Lời mời từ Sunrise English','Invitation from Sunrise English'),T('Cô Lan mời bạn tham gia với vai trò Học viên.','Ms. Lan invited you as a Learner.'),'org'],
+  ['sparkles','default',T('AI Tutor đã trả lời','AI Tutor replied'),T('“by” vs “until” — xem giải thích mới.','“by” vs “until” — see the new explanation.'),'tutor'],
+];
+/** Workspace (tenant) switcher — the ONLY brand/identity block in the sidebar (HeroUI Pro dashboard pattern) */
+function tenantSwitcher(){
+  const u=user(), t=TENANTS[S.tenant], open=S.navMenu==='tenant';
+  const ctx = S.role==='content_admin' ? [['engrisk','Engrisk',T('Content team · Platform','Content team · Platform')]]
+    : S.role==='teacher' ? [['sunrise','Sunrise English',T('Giáo viên · Tenant','Teacher · Tenant')],['engrisk','Engrisk',T('Cá nhân · Học viên','Personal · Learner')]]
+    : [['engrisk','Engrisk',T('Cá nhân · Học viên','Personal · Learner')],...(!u.guest&&S.org.invite==='accepted'?[['sunrise','Sunrise English',T('Học viên · Phase 4','Learner · Phase 4')]]:[])];
+  return `<div class="dropdown sidebar__switch-wrap" data-dropdown="1">
+    <button type="button" class="sidebar__switch" data-action="navMenu" data-v="tenant" data-fk="nav:tenant" aria-haspopup="menu" aria-expanded="${open}" title="${esc(t.name)}">
+      <span class="brand__mark" style="${S.tenant==='sunrise'?`background:${S.org.accent}`:''}">${t.mark}</span>
+      <span class="grow sidebar__label" style="min-width:0"><span class="truncate" style="display:block;font-weight:700">${t.name}</span><span class="text-xs text-muted truncate" style="display:block">${(ctx.find(c=>c[0]===S.tenant)||[0,0,tx(t.sub)])[2]}</span></span>
+      <span class="sidebar__label text-muted">${icon('chevrons-expand-vertical',14)}</span></button>
+    ${open?`<div class="dropdown__menu sidebar__menu" role="menu" aria-label="${T('Ngữ cảnh học','Learning context')}"><div class="menu-head">${T('Ngữ cảnh học','Learning context')}</div>
+      ${ctx.map(([id,n,r])=>`<button type="button" class="menu-item" role="menuitemradio" aria-checked="${S.tenant===id}" data-action="switchTenant" data-v="${id}"><span class="brand__mark" style="width:28px;height:28px;font-size:13px;${id==='sunrise'?`background:${S.org.accent}`:''}">${TENANTS[id].mark}</span><span class="grow"><span style="display:block;font-weight:500">${n}</span><span class="text-xs text-muted">${r}</span></span>${S.tenant===id?icon('check',14,'text-accent'):''}</button>`).join('')}
+      ${u.guest?`<div class="menu-note">${T('Đăng nhập để tham gia lớp của trung tâm.','Sign in to join a learning center.')}</div>`:S.org.invite==='pending'?`<button type="button" class="menu-item" data-action="go" data-to="org">${icon('envelope')}<span class="grow">${T('Lời mời: Sunrise English','Invite: Sunrise English')}</span>${chip(T('Mới','New'),'accent',null,{size:'sm'})}</button>`:''}
+      <div class="separator" style="margin:6px 0"></div>
+      <button type="button" class="menu-item" data-action="go" data-to="org">${icon('office-badge')}<span class="grow">${T('Tổ chức của tôi','My organizations')}</span>${phase('P4')}</button></div>`:''}</div>`;
+}
+function userMenu(){
+  const u=user(), open=S.navMenu==='user', dark=resolvedTheme()==='dark';
+  return `<div class="dropdown sidebar__user-wrap" data-dropdown="1">
+    <button type="button" class="sidebar__user" data-action="navMenu" data-v="user" data-fk="nav:user" aria-haspopup="menu" aria-expanded="${open}" title="${esc(u.name)}">${avatar(u.initials,{size:'sm'})}<span class="grow sidebar__label" style="min-width:0"><span class="truncate" style="display:block;font-weight:500">${u.name}</span><span class="truncate text-xs text-muted" style="display:block">${u.email||T('Chế độ khách','Guest mode')}</span></span><span class="sidebar__label text-muted">${icon('ellipsis',16)}</span></button>
+    ${open?`<div class="dropdown__menu dropdown__menu--up sidebar__menu" role="menu" aria-label="${T('Tài khoản','Account')}">
+      <button type="button" class="menu-item" data-action="go" data-to="profile">${icon('person')}<span class="grow">${T('Tài khoản & mục tiêu','Account & goals')}</span></button>
+      <button type="button" class="menu-item" data-action="go" data-to="profile">${icon('palette')}<span class="grow">${T('Giao diện','Appearance')}</span><span class="toolbar__dots" aria-hidden="true" style="padding:2px">${PALETTES.map(p=>`<i class="menu-dot ${S.palette===p.id?'is-on':''}" style="background:${p.accent}"></i>`).join('')}</span></button>
+      <div class="menu-item" role="menuitemcheckbox" aria-checked="${dark}">${icon('moon')}<span class="grow">${T('Chế độ tối','Dark mode')}</span>${switchEl(dark,'toggleDark',T('Chế độ tối','Dark mode'))}</div>
+      <button type="button" class="menu-item" data-action="go" data-to="profile">${icon('globe')}<span class="grow">${T('Ngôn ngữ','Language')}</span><span class="text-xs text-muted">${LANGS.find(l=>l[0]===S.lang)[1]}</span></button>
+      <button type="button" class="menu-item" data-action="noop">${icon('circle-question')}<span class="grow">${T('Trợ giúp & phản hồi','Help & feedback')}</span></button>
+      <div class="separator" style="margin:6px 0"></div>
+      ${u.guest?`<button type="button" class="menu-item" data-action="convert">${icon('person')}<span class="grow">${T('Tạo tài khoản','Create account')}</span></button>`:`<button type="button" class="menu-item" data-action="logout">${icon('arrow-right-from-square')}<span class="grow">${T('Đăng xuất','Sign out')}</span></button>`}</div>`:''}</div>`;
+}
+/** Sidebar footer card: only for guests (save-progress conversion). Signed-in learners see progress on Home/Tiến độ, not repeated here. */
+function sidebarFooterCard(){
+  if (!user().guest) return '';
+  return `<div class="card sidebar__card" style="align-items:center;text-align:center">${mascot({mood:'wave',size:56})}<div class="card__title card__title--sm">${T('Lưu tiến độ của bạn','Save your progress')}</div><div class="text-xs text-muted">${T('Kết quả đã làm được giữ nguyên.','Your results are kept.')}</div>${btn(T('Tạo tài khoản','Create account'),{size:'sm',action:'convert',full:true})}</div>`;
+}
+function notifMenu(){
+  const open=S.navMenu==='notif', items=NOTIFS().filter(n=>!(n[4]==='resume'&&!S.resume)&&!(n[4]==='org'&&S.org.invite!=='pending')&&!(user().guest&&n[4]!=='resume'));
+  return `<div class="dropdown" data-dropdown="1">${`<button type="button" class="button button--ghost button--sm button--icon-only notif-btn" data-action="navMenu" data-v="notif" data-fk="nav:notif" aria-haspopup="menu" aria-expanded="${open}" aria-label="${T('Thông báo','Notifications')} (${items.length})" title="${T('Thông báo','Notifications')}">${icon('bell')}${items.length?`<span class="notif-dot" aria-hidden="true"></span>`:''}</button>`}
+    ${open?`<div class="dropdown__menu notif-menu" role="menu" aria-label="${T('Thông báo','Notifications')}"><div class="menu-head row row--between">${T('Thông báo','Notifications')}<span class="text-xs text-muted">${items.length}</span></div>
+      ${items.length?items.map(([ic,c,t,d,to])=>`<button type="button" class="menu-item" style="align-items:flex-start" data-action="${to==='resume'?'resume':'go'}" data-to="${to}">${tile(ic,c,'sm')}<span class="grow"><span style="display:block;font-weight:500">${t}</span><span class="text-xs text-muted">${d}</span></span></button>`).join('')
+        :`<div class="menu-note">${T('Không có thông báo mới.','No new notifications.')}</div>`}
+      <div class="menu-note">${T('Nhắc học tối đa 1 lần/ngày — chỉnh trong Tài khoản.','At most one study reminder a day — change in Account.')}</div></div>`:''}</div>`;
+}
 function desktopApp(scr,inner,{title,sub}={}){
-  const u=user(), t=TENANTS[S.tenant], cur=SCREENS[scr].nav;
-  return `<div class="shell">
+  const cur=SCREENS[scr].nav, col=S.sideCollapsed, inProg=S.resume&&!S.exam, u=user();
+  return `<div class="shell ${col?'is-collapsed':''}">
     <nav class="sidebar" aria-label="${T('Điều hướng chính','Main navigation')}">
-      <div class="sidebar__brand">${brand()}${btn('',{v:'ghost',size:'sm',ic:'bell',action:'noop',aria:T('Thông báo','Notifications')})}</div>
-      <button type="button" class="sidebar__tenant" data-action="go" data-to="org" data-fk="go:tenant"><span class="brand__mark" style="width:32px;height:32px;border-radius:10px">${t.mark}</span><span class="grow"><span class="truncate" style="display:block;font-weight:500">${t.name}</span><span class="text-xs text-muted">${tx(t.sub)}</span></span>${icon('chevron-down',14,'text-muted')}</button>
-      <div class="sidebar__section">${T('Học tập','Learn')}</div>${NAV_LEARN().map(([id,i,l])=>navItem(id,i,l,cur)).join('')}
-      <div class="sidebar__section">${T('Thư viện','Library')}</div>${navItem('library','folder',T('Tài liệu của tôi','My materials'),cur,phase('P3'))}${navItem('org','office-badge',T('Tổ chức','Organization'),cur,phase('P4'))}
+      ${tenantSwitcher()}
+      ${col?`<button type="button" class="sidebar__search" data-action="sideSearch" data-fk="nav:search" title="${T('Tìm đề, Part, dạng câu','Search tests, parts, types')}" aria-label="${T('Tìm đề','Search tests')}">${icon('magnifier')}</button>`
+        :`<label class="sidebar__search">${icon('magnifier')}<input id="side-q" class="grow" data-input="sideQ" value="${esc(S.catalog.q)}" placeholder="${T('Tìm đề, Part, dạng câu…','Search tests, parts, types…')}" aria-label="${T('Tìm đề','Search tests')}" autocomplete="off">${S.catalog.q?`<button type="button" class="sidebar__clear" data-action="resetFilters" aria-label="${T('Xóa tìm kiếm','Clear search')}">${icon('xmark',12)}</button>`:kbd('/')}</label>`}
+      <div class="sidebar__section">${T('Học tập','Learn')}</div>${NAV_LEARN().map(([id,i,l])=>navItem(id,i,l,cur,id==='catalog'&&inProg?`<span class="sidebar__badge" title="${T('Có bài đang làm dở','Test in progress')}"></span>`:'')).join('')}
+      ${u.staff?`<div class="sidebar__section">${T('Nội dung','Content')}</div>${NAV_CONTENT().map(([id,i,l])=>navItem(id,i,l,cur,id==='moderation'&&reviewCount()?`<span class="sidebar__label sidebar__end">${chip(String(reviewCount()),'accent',null,{size:'sm'})}</span>`:'')).join('')}`
+        :`<div class="sidebar__section">${T('Thư viện','Library')}</div>${navItem('library','folder',T('Tài liệu của tôi','My materials'),cur,`<span class="sidebar__label sidebar__end">${phase('P3')}</span>`)}${u.guest?'':navItem('contribute','square-plus',T('Đóng góp đề','Contribute'),cur)}`}
       <div class="grow"></div>
-      ${u.guest?`<div class="card" style="gap:8px;margin-bottom:8px;align-items:center;text-align:center">${mascot({mood:'wave',size:64})}<div class="card__title card__title--sm">${T('Lưu tiến độ của bạn','Save your progress')}</div><div class="text-xs text-muted">${T('Kết quả đã làm được giữ nguyên.','Your results are kept.')}</div>${btn(T('Tạo tài khoản','Create account'),{size:'sm',action:'convert',full:true})}</div>`:''}
-      ${navItem('profile','gear',T('Tài khoản & giao diện','Account & appearance'),cur)}
-      <div class="separator" style="margin:8px 0"></div>
-      <button type="button" class="sidebar__user" data-action="go" data-to="profile" data-fk="go:user">${avatar(u.initials,{size:'sm'})}<span class="grow"><span class="truncate" style="display:block;font-weight:500">${u.name}</span><span class="truncate text-xs text-muted" style="display:block">${u.email||T('Chế độ khách','Guest mode')}</span></span>${icon('ellipsis',16,'text-muted')}</button>
+      <div class="sidebar__label">${sidebarFooterCard()}</div>
+      ${userMenu()}
     </nav>
     <div class="main">
-      <header class="navbar"><div class="navbar__title"><h1 class="page-title truncate">${title}</h1>${sub?`<span class="text-sm text-muted truncate">${sub}</span>`:''}</div>
-        ${langPicker('navbar')}${btn('',{v:'tertiary',size:'sm',ic:'magnifier',action:'go',data:{to:'catalog'},aria:T('Tìm bài luyện','Search')})}${btn('',{v:'ghost',size:'sm',ic:'circle-question',action:'noop',aria:T('Trợ giúp','Help')})}${scr!=='catalog'?btn(T('Luyện nhanh','Quick practice'),{size:'sm',ic:'thunderbolt',action:'quick'}):''}</header>
-      <div class="page" data-scroll="content"><div class="page__inner">${inner}</div></div>
+      <header class="navbar">${btn('',{v:'ghost',size:'sm',ic:col?'layout-side-content':'layout-side-content-left',action:'toggleSide',aria:col?T('Mở thanh bên','Expand sidebar'):T('Thu gọn thanh bên','Collapse sidebar')})}<div class="navbar__title"><h1 class="page-title truncate">${title}</h1>${sub?`<span class="text-sm text-muted truncate">${sub}</span>`:''}</div>
+        ${langPicker('navbar')}${notifMenu()}${scr!=='catalog'&&!['studio','moderation'].includes(cur)?btn(T('Luyện nhanh','Quick practice'),{size:'sm',ic:'thunderbolt',action:'quick'}):''}</header>
+      <div class="page" data-scroll="content"><div class="page__inner ${['studio','moderation'].includes(cur)?'page__inner--wide':''}">${inner}</div></div>
     </div></div>`;
 }
 function mobileApp(scr,inner,{title,sub,back,sticky,large}={}){
-  const u=user(), cur=SCREENS[scr].nav;
+  const cur=SCREENS[scr].nav;
   const head = large
-    ? `<header class="m-largetitle"><div class="m-largetitle__bar">${brand()}<div class="row gap-1">${langPicker('m-top')}<button type="button" class="button button--ghost button--icon-only button--sm" data-action="go" data-to="profile" data-fk="go:avatar" aria-label="${T('Tài khoản','Account')}">${avatar(u.initials,{size:'xs'})}</button></div></div><h1 class="m-largetitle__title">${title}</h1>${sub?`<p class="text-muted" style="margin-top:2px">${sub}</p>`:''}</header>`
+    ? `<header class="m-largetitle"><div class="m-largetitle__bar">${brand()}<div class="row gap-1">${langPicker('m-top')}${notifMenu()}</div></div><h1 class="m-largetitle__title">${title}</h1>${sub?`<p class="text-muted" style="margin-top:2px">${sub}</p>`:''}</header>`
     : `<header class="m-appbar">${back?btn('',{v:'ghost',ic:'chevron-left',action:'back',aria:T('Quay lại','Back')}):'<span></span>'}<div class="m-appbar__title truncate">${title}</div><span></span></header>`;
   return `<div class="m-shell">${head}<div class="m-content" data-scroll="content">${inner}</div>
-    ${sticky?`<div class="m-sticky">${sticky}</div>`:`<nav class="tabbar" aria-label="${T('Điều hướng chính','Main navigation')}">${MNAV().map(([id,i,l])=>`<button type="button" class="tabbar__item" data-action="go" data-to="${id}" data-fk="tab:${id}" ${cur===id||(id==='profile'&&['library','org'].includes(cur))?'aria-current="page"':''}>${icon(i,22)}<span>${l}</span></button>`).join('')}</nav>`}</div>`;
+    ${sticky?`<div class="m-sticky">${sticky}</div>`:`<nav class="tabbar" aria-label="${T('Điều hướng chính','Main navigation')}">${MNAV().map(([id,i,l])=>`<button type="button" class="tabbar__item" data-action="go" data-to="${id}" data-fk="tab:${id}" ${cur===id||(id==='profile'&&['library','org','contribute','studio','moderation'].includes(cur))?'aria-current="page"':''}>${icon(i,22)}<span>${l}</span></button>`).join('')}</nav>`}</div>`;
 }
 function publicShell(inner){
   if (isM()) return `<div class="m-shell"><header class="m-appbar" style="grid-template-columns:1fr auto;padding:0 12px 0 16px">${brand()}<div class="row gap-1">${langPicker('pub-m')}${S.screen==='landing'?btn(T('Đăng nhập','Sign in'),{v:'tertiary',size:'sm',action:'go',data:{to:'auth'}}):btn('',{v:'ghost',ic:'xmark',action:'go',data:{to:'landing'},aria:T('Đóng','Close')})}</div></header><div class="m-content" data-scroll="content">${inner}</div></div>`;
@@ -111,9 +168,10 @@ function overlays(){
 }
 
 /* ---------- Composition ---------- */
-const TITLES = () => ({catalog:T('Luyện đề','Practice tests'),'exam-intro':T('Thiết lập bài làm','Test setup'),results:T('Kết quả','Results'),review:T('Xem lại đáp án','Review answers'),tutor:'AI Tutor',library:T('Tài liệu của tôi','My materials'),progress:T('Tiến độ','Progress'),profile:T('Tài khoản','Account'),org:T('Tổ chức','Organization')});
-const SUBS = () => ({catalog:T('Đề thi thử đầy đủ, luyện theo Part/dạng câu và bài ngắn','Full tests, part or question-type practice and quick sets'),'exam-intro':T('Chọn thi thử hoặc tự thiết lập buổi luyện','Take a mock or set up your own practice'),tutor:T('Giải thích dựa trên đáp án đã kiểm duyệt','Explanations grounded in verified answers'),library:T('Tài liệu riêng tư → câu hỏi luyện tập riêng','Private material → personal practice'),progress:T('Xu hướng điểm, kỹ năng và lịch sử','Score trend, skills and history'),profile:T('Mục tiêu, giao diện, ngôn ngữ và tài khoản','Goals, appearance, language and account'),org:T('Trải nghiệm học viên trong tổ chức','Learner experience in an organization')});
-const RENDER = {landing:rLanding,auth:rAuth,onboarding:rOnboarding,home:rHome,catalog:rCatalog,'exam-intro':rIntro,exam:rExam,writing:rWriting,speaking:rSpeaking,results:rResults,review:rReview,tutor:rTutor,library:rLibrary,progress:rProgress,profile:rProfile,org:rOrg};
+const TITLES = () => ({catalog:T('Luyện đề','Practice tests'),'exam-intro':T('Thiết lập bài làm','Test setup'),results:T('Kết quả','Results'),review:T('Xem lại đáp án','Review answers'),tutor:'AI Tutor',library:T('Tài liệu của tôi','My materials'),progress:T('Tiến độ','Progress'),profile:T('Tài khoản','Account'),org:T('Tổ chức','Organization'),
+  contribute:T('Đóng góp đề','Contribute'),studio:'Content Studio','studio-editor':studioEditorTitle(),'studio-import':T('Nhập gói đề','Import package'),moderation:T('Kiểm duyệt','Review queue')});
+const RENDER = {landing:rLanding,auth:rAuth,onboarding:rOnboarding,home:rHome,catalog:rCatalog,'exam-intro':rIntro,exam:rExam,writing:rWriting,speaking:rSpeaking,results:rResults,review:rReview,tutor:rTutor,library:rLibrary,progress:rProgress,profile:rProfile,org:rOrg,
+  contribute:rContribute,studio:rStudio,'studio-editor':rStudioEditor,'studio-import':rStudioImport,moderation:rModeration};
 function screenHtml(){
   const scr=S.screen, def=SCREENS[scr], inner=RENDER[scr]();
   if (def.chrome==='focus') return inner;
@@ -124,9 +182,9 @@ function screenHtml(){
     const top=['home','catalog','tutor','progress','profile'].includes(scr);
     return mobileApp(scr,inner,{title:scr==='home'?`${T('Chào','Hi')} ${esc(u.first)}`:titles[scr],sub:scr==='home'?home.sub:null,back:!top,large:top,sticky:scr==='exam-intro'?introCta():''});
   }
-  return desktopApp(scr,inner,scr==='home'?home:{title:titles[scr],sub:SUBS()[scr]});
+  return desktopApp(scr,inner,scr==='home'?home:{title:titles[scr]});
 }
-const urlFor = () => { const d=SCREENS[S.screen]; return `/${S.lang}`+d.url.replace(':slug',(S.setup&&S.setup.examId)||S.introExam).replace(':id','att_7f3c').replace(':conversationId','conv_19a2').replace(':n',String((S.review.idx||0)+1)); };
+const urlFor = () => { const d=SCREENS[S.screen]; return `/${S.lang}`+d.url.replace(':slug',(S.setup&&S.setup.examId)||S.introExam).replace(':id','att_7f3c').replace(':conversationId','conv_19a2').replace(':n',String((S.review.idx||0)+1)).replace(':draftId',(S.studio.ed&&S.studio.ed.id)||'new').replace('/:submissionId',S.contrib.sel?'/'+S.contrib.sel:''); };
 function frameHtml(){
   if (S.screen==='design-system') return rDesignSystem();
   const style = S.tenant==='sunrise'?`style="--accent:${S.org.accent};--accent-foreground:var(--snow);--focus:${S.org.accent}"`:'';
@@ -137,7 +195,8 @@ function frameHtml(){
 function toolbarHtml(){
   const ds=S.screen==='design-system';
   return `${ds?'':`<span class="label">Thiết bị</span>${tabs('Thiết bị',[['desktop','Web','display'],['mobile','Mobile','smartphone']],S.device,'device',{size:'sm'})}
-    <span class="label">Người dùng</span>${tabs('Persona',[['guest','Khách'],['new','Người mới'],['returning','Đã học']],S.persona,'persona',{size:'sm'})}`}
+    <span class="label">Người dùng</span>${tabs('Persona',[['guest','Khách'],['new','Người mới'],['returning','Đã học']],S.persona,'persona',{size:'sm'})}
+    <span class="label">Vai trò</span>${tabs('Vai trò',[['learner','Học viên'],['teacher','Giáo viên'],['content_admin','Content admin']],S.role,'role',{size:'sm'})}`}
     <span class="label">Ngôn ngữ</span>${tabs('Ngôn ngữ',[['vi','VI'],['en','EN']],S.lang,'setLang',{size:'sm'})}
     <span class="label">Preset</span><div class="toolbar__dots" role="radiogroup" aria-label="HeroUI preset">${PALETTES.map(p=>`<button type="button" class="toolbar__dot" role="radio" aria-checked="${S.palette===p.id}" title="${p.name}" aria-label="${p.name}" data-action="setPalette" data-v="${p.id}" data-fk="tb-pal:${p.id}" style="background:${p.accent}"></button>`).join('')}</div>
     ${tabs('Chế độ',[['light','','sun'],['dark','','moon'],['system','','display']],S.mode,'setMode',{size:'sm'})}
@@ -239,7 +298,16 @@ function personaApply(p){
   S.resume = p==='returning'?initial().resume:null;
   S.lib=initial().lib; if (p!=='returning') S.lib.materials=[];
   S.tutor=initial().tutor;
-  if (p==='guest'&&S.tenant!=='engrisk') S.tenant='engrisk';
+  if (p==='guest'){ S.role='learner'; if(S.tenant!=='engrisk') S.tenant='engrisk'; }
+}
+/** Prototype role switch: staff roles imply a signed-in account and their home tenant. */
+function roleApply(r){
+  S.role=r; S.navMenu=null; if (S.persona!=='returning') personaApply('returning');
+  if (r==='teacher') S.org.invite='accepted';
+  S.tenant=ROLES[r].tenant; S.studio=studioInitial();
+  const nav=SCREENS[S.screen].nav;
+  if (r==='learner'&&['studio','moderation'].includes(nav)) S.screen='home';
+  if (r!=='learner'&&nav==='contribute') S.screen='studio';
 }
 const A = {
   device:d=>{S.device=d.v;render(true);},
@@ -250,9 +318,13 @@ const A = {
   dismissLangSuggest:()=>{ S.langSuggestDone=true; render(); },
   resetLangSuggest:()=>{ S.langSuggestDone=false; render(); },
   persona:d=>{personaApply(d.v); if(d.v==='guest'&&!['landing','catalog','exam','results','review','auth','exam-intro','design-system'].includes(S.screen)) S.screen='landing'; render(true);},
+  role:d=>themeSwitch(()=>roleApply(d.v)),
   tenantTb:d=>{ if(d.v==='sunrise'){ if(user().guest){toast(T('Khách không thuộc tổ chức nào','Guests don’t belong to organizations'),T('Chọn persona “Đã học” để xem.','Switch persona to “Đã học” to view.'),'warning');return;} S.org.invite='accepted'; } themeSwitch(()=>{S.tenant=d.v;}); },
   resetAll:()=>{ const keep={device:S.device,mode:S.mode,palette:S.palette,lang:S.lang}; S=initial(); Object.assign(S,keep); render(true); },
-  jump:d=>{ if(d.to==='exam'&&!S.exam) S.exam=S.resume&&S.persona==='returning'?JSON.parse(JSON.stringify(S.resume)):newAttempt('toeic-test-01'); if(d.to==='exam-intro'&&!S.setup) S.setup=setupFor(S.introExam); go(d.to); },
+  jump:d=>{ const nav=SCREENS[d.to].nav;
+    if (['studio','moderation'].includes(nav)&&S.role==='learner') roleApply('content_admin');
+    if (nav==='contribute'&&(S.role!=='learner'||S.persona==='guest')){ roleApply('learner'); }
+    if(d.to==='exam'&&!S.exam) S.exam=S.resume&&S.persona==='returning'?JSON.parse(JSON.stringify(S.resume)):newAttempt('toeic-test-01'); if(d.to==='exam-intro'&&!S.setup) S.setup=setupFor(S.introExam); go(d.to); },
   go:d=>{ if(d.to==='exam'&&!S.exam) S.exam=newAttempt('toeic-test-01'); go(d.to); },
   back:()=>{ let p=S.hist.pop(); while(p==='design-system') p=S.hist.pop(); S.screen=p||'home'; S.modal=null; render(true); },
   setState:d=>{ S.states[S.screen]=d.s==='default'?null:d.s; render(true); },
@@ -357,10 +429,16 @@ const A = {
   logout:()=>{ personaApply('guest'); go('landing'); toast(T('Đã đăng xuất','Signed out'),'','info'); },
   deleteAccount:()=>{ S.modal={type:'delete'}; render(); },
   confirmDelete:()=>{ personaApply('guest'); go('landing'); toast(T('Đã gửi yêu cầu xóa tài khoản','Deletion requested'),T('Mô phỏng — không có dữ liệu thật bị xóa.','Simulated — no real data deleted.'),'info'); },
-  switchTenant:d=>{ themeSwitch(()=>{S.tenant=d.v;}); toast(d.v==='sunrise'?T('Đã chuyển sang Sunrise English','Switched to Sunrise English'):T('Đã chuyển về Engrisk','Switched to Engrisk'),T('Phiên đăng nhập đổi active_tenant_id; dữ liệu học tách riêng.','Session active_tenant_id changed; learning data stays separate.'),'info'); },
+  switchTenant:d=>{ S.navMenu=null; if(S.tenant===d.v){ render(); return; } themeSwitch(()=>{S.tenant=d.v;}); toast(d.v==='sunrise'?T('Đã chuyển sang Sunrise English','Switched to Sunrise English'):T('Đã chuyển về Engrisk','Switched to Engrisk'),T('Phiên đăng nhập đổi active_tenant_id; dữ liệu học tách riêng.','Session active_tenant_id changed; learning data stays separate.'),'info'); },
+  navMenu:d=>{ S.navMenu=S.navMenu===d.v?null:d.v; S.langMenu=null; render(); },
+  toggleSide:()=>{ S.sideCollapsed=!S.sideCollapsed; S.navMenu=null; render(); },
+  toggleDark:()=>themeSwitch(()=>{ S.mode=resolvedTheme()==='dark'?'light':'dark'; }),
+  sideSearch:()=>{ S.navMenu=null; S.sideCollapsed=false; render(); requestAnimationFrame(()=>{ const i=document.getElementById('side-q'); if(i){ i.focus(); i.select(); } }); },
   invite:d=>{ S.org.invite=d.v; if(d.v==='accepted'){ S.tenant='sunrise'; toast(T('Đã tham gia Sunrise English','Joined Sunrise English'),T('Tạo membership + vai trò Học viên.','Membership + Learner role created.')); } if(d.v!=='accepted'&&S.tenant==='sunrise') S.tenant='engrisk'; render(true); },
   orgAccent:d=>themeSwitch(()=>{ S.org.accent=d.c; S.tenant='sunrise'; }),
 };
+/* Feature modules (loaded before app.js) contribute their own actions. */
+Object.assign(A, STUDIO_ACTIONS, COMMUNITY_ACTIONS);
 function finishAuth(method){
   const convert=S.auth.convert, signup=S.auth.tab==='signup'||convert;
   if (method==='password'){ const email=(document.getElementById('f-email')||{}).value||'';
@@ -391,7 +469,7 @@ document.addEventListener('click',ev=>{
   if (ev.target.closest('.toast [data-undo]')){ A.undoRemove(); return; }
   if (!ev.target.closest('.sel-menu')) hideSelMenu();
   if (S.langMenu && !ev.target.closest('[data-dropdown]')){ S.langMenu=null; render(); }
-  if (S.pPop && !ev.target.closest('[data-dropdown]')){ S.pPop=null; render(); }
+  if ((S.pPop||S.navMenu) && !ev.target.closest('[data-dropdown]')){ S.pPop=null; S.navMenu=null; render(); }
   trackFocus(ev.target);
   const el=ev.target.closest('[data-action]'); if(!el||el.disabled) return;
   const act=el.dataset.action; if(!act||!A[act]) return;
@@ -400,14 +478,15 @@ document.addEventListener('click',ev=>{
 });
 document.addEventListener('keydown',ev=>{
   if ((ev.key==='Enter'||ev.key===' ')&&ev.target.matches('tr[data-action]')){ ev.preventDefault(); ev.target.click(); return; }
-  if (ev.key==='Escape'&&(S.langMenu||S.pPop)){ S.langMenu=null; S.pPop=null; render(); return; }
+  if (ev.key==='Escape'&&(S.langMenu||S.pPop||S.navMenu)){ S.langMenu=null; S.pPop=null; S.navMenu=null; render(); return; }
+  if (ev.key==='/'&&!ev.target.matches('input,textarea,select')&&S.screen!=='exam'&&SCREENS[S.screen].chrome==='app'&&!isM()){ ev.preventDefault(); A.sideSearch(); return; }
   if (ev.key==='Escape'&&(S.modal||S.sheet)&&!(S.modal&&['grading','section'].includes(S.modal.type))){ S.modal=null; S.sheet=null; render(); return; }
   if (ev.key==='Enter'&&ev.target.id==='tutor-input'){ A.tutorSend(); return; }
   playerKey(ev);
 });
 document.addEventListener('change',ev=>{
   const el=ev.target, k=el.dataset.input; if(!k) return;
-  if (playerChange(el,k)) return;
+  if (playerChange(el,k)||studioChange(el,k)||communityChange(el,k)) return;
   if (k==='suPart'){ const p=S.setup.parts, i=p.indexOf(el.dataset.v); if(el.checked&&i<0) p.push(el.dataset.v); if(!el.checked&&i>=0) p.splice(i,1); const order=examParts(EXAMS[S.setup.examId]); p.sort((a,b)=>order.indexOf(a)-order.indexOf(b)); render(); }
   if (k==='suSection'){ const ps=el.dataset.v.split(','), su=S.setup; su.parts = el.checked ? [...new Set([...su.parts,...ps])] : su.parts.filter(p=>!ps.includes(p)); const order=examParts(EXAMS[su.examId]); su.parts.sort((a,b)=>order.indexOf(a)-order.indexOf(b)); render(); }
   if (k==='suSoundOk'){ S.setup.soundOk=el.checked; render(); }
@@ -419,11 +498,12 @@ document.addEventListener('focusout',ev=>{
 });
 document.addEventListener('input',ev=>{
   const el=ev.target, k=el.dataset.input; if(!k) return;
-  if (playerInput(el,k)) return;
+  if (playerInput(el,k)||studioInput(el,k)||communityInput(el,k)) return;
   if (k==='writing'){ S.writing.text=el.value; const wc=words(el.value), target=S.writing.mobileMode==='intro'?50:250, c=document.getElementById('w-count'); if(c){ c.textContent=`${wc} / ${target} ${T('từ','words')}`; c.className=`tnum font-medium ${wc>=target?'text-success':'text-muted'}`; } }
   if (k==='tutorDraft') S.tutor.draft=el.value;
   if (k==='authEmail'){ S.auth.email=el.value; if(S.auth.emailInvalid&&/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(el.value.trim())){ S.auth.emailInvalid=false; render(); } }
   if (k==='catQ'){ S.catalog.q=el.value; render(); }
+  if (k==='sideQ'){ S.catalog.q=el.value; if(S.screen!=='catalog'){ if(S.hist[S.hist.length-1]!==S.screen) S.hist.push(S.screen); S.screen='catalog'; S.navMenu=null; } render(); }
 });
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{ if(S.mode==='system') render(); });
 
