@@ -1,87 +1,132 @@
 // =============================================================================
 // Engrisk — PostgreSQL domain model (design artifact, not a migration)
-// Companion docs: apps/ux_preview/product_flow.md (section J maps UX → tables)
-// Validated with @dbml/cli dbml2sql --postgres and applied to PostgreSQL 14.
+// Revision 4.2: workload-based mixed BIGINT/UUID identifiers (random 8-digit BIGINT user IDs); integrity-first optimization of the approved Core V2 versioned content graph
+// (engrisk_core_content_v2.dbml); remaining domains reviewed for safe consolidation without compromising integrity.
+// Companion docs: apps/ux_preview/product_flow.md, content_studio_spec.md,
+// backend/docs_design/api_*.md (API docs still use revision-1 table names; see rename map).
+// PostgreSQL 14 design target. Requires @dbml/cli + PostgreSQL DDL validation before migration.
 // =============================================================================
 
 Project engrisk {
   database_type: 'PostgreSQL'
   Note: '''
-# Engrisk data model
+# Engrisk data model (revision 4.2)
 
-**Scope.** TOEIC + IELTS practice, mock exams, review, AI tutor/evaluation, learner uploads.
+**Scope.** TOEIC + IELTS practice, mock exams, review, AI tutor/evaluation, learner uploads,
+Content Studio, community contributions — and using the same content core, courses, lessons,
+curated collections, AI-generated content and adaptive practice.
 Phase 1 runs as ONE logical product (the platform tenant). The model is multi-tenant-ready.
 
-## Domains (TableGroups)
-1. identity_access   — global users, auth identities, sessions, RBAC
-2. tenancy           — tenants, memberships, entitlements, invitations
-3. assets_uploads    — files in object storage + learner source materials
-4. exam_content      — exam types, skills, question bank, exams, immutable revisions,
-                       section audio + cues + scripts, credits
-5. content_workflow  — Content Studio import jobs, submissions, reviews, review comments (P3/P4)
-6. learning_records  — goals, attempts, responses, evaluations, scores, skill stats, ratings
-7. ai                — AI run provenance + AI tutor conversations
+## Domains (TableGroups) — 40 tables
+1. identity_access  (8) global identity, unified action tokens and role assignments, RBAC
+2. tenancy          (3) tenants, memberships, feature entitlements
+3. media            (2) object-storage files + learner source materials
+4. reference        (2) exam types, skill taxonomy
+5. content_graph    (7) items, immutable versions, placements, media links/timelines,
+                         protected answer specs and skill tags
+6. content_ecosystem(4) access grants, credits, ratings, reports
+7. content_workflow (3) imports, submissions, unified feedback and review-decision events
+8. learning         (6) goals, attempts, responses, annotations, evaluations, scores
+9. ai               (3) AI-run ledger, conversations and messages
+10. platform        (2) async jobs, idempotency keys
 
-41 tables (34 base + 7 for the content ecosystem: revision_audio_tracks, exam_credits,
-content_import_jobs, content_submissions, submission_reviews, review_comments, exam_ratings).
-Companion spec for the content ecosystem: apps/ux_preview/content_studio_spec.md.
+**Lean-first policy.** The two statistics tables in V3 were derived caches, not authoritative facts.
+Delivery manifests are immutable media_assets (deterministic keys) pinned by attempts.
+One-time tokens and role assignments are reused across account/tenant workflows.
+Review decisions are append-only content_comments events. Re-introduce materialized read
+models when a measured performance requirement warrants it, not by default.
+
+## Content model = versioned content graph (Core V2)
+- `content_items` is the stable logical identity (exam, section, block, stimulus, question,
+  collection; later course, module, lesson…). It owns tenant, visibility, access tier,
+  provenance, owner, archival and the `current_published_version_id` pointer. NO parent_id.
+- `content_item_versions` owns everything that is versioned: schema_key (renderer/domain
+  contract), title, learner-visible `body`, behavioural `settings`, difficulty, points,
+  scoring policy, origin/AI provenance, publication state. Published versions are immutable.
+- `content_item_relations` are ordered placements parent VERSION → child ITEM (+ exact child
+   version when pinned). Placement ID is stable inside that parent version; a child may be
+   placed multiple times in one tree, so attempts must identify served occurrence.
+  Exam subtrees are pinned only; collections may bind `latest_published`.
+- Protected data never sits in learner-visible `body`: answer keys/rubrics/explanations live
+  in `content_answer_specs`; transcripts and cue maps live in `content_media_timelines`.
+- Typical TOEIC tree: exam → section (L, R) → section (P1..P7) → block (Part 3 conversation)
+  → stimulus (audio clip) + questions. Standalone questions (Part 2/5) hang off a section.
+  IELTS: exam → section (Listening P1..P4 / Reading passages / Writing tasks) → block → …
+  A course later: course → module → lesson → stimulus/question/exam. Same tables.
+- A practice set that picks a subset of a passage's questions is a new block placing the SAME
+  stimulus and question items; nothing is copied.
+- Publishing a root compiles a pinned, learner-visible `media_assets` object (purpose=delivery_manifest).
 
 ## Tenant isolation strategy
 - **Global (no tenant_id):** users, auth_*, permissions, system roles, exam_types, skills.
-- **Tenant-owned roots carry NOT NULL tenant_id:** content, exams, attempts, goals, AI runs.
-- **Children inherit** tenant via parent (responses → attempts, messages → conversations),
-  except where tenant_id is needed to enforce a composite FK (exam_revisions, exam_revision_items).
-- **Composite FKs** `(tenant_id, x_id) → parent(tenant_id, id)` make cross-tenant links
-  impossible inside authoring graphs (question → group, revision item → question, ...).
-- **Learner data → membership:** `(tenant_id, user_id) → tenant_memberships(tenant_id, user_id)`
-  guarantees learner records only exist inside a tenant the user belongs to.
-- **Single intentional cross-tenant edge:** learner records may reference PUBLISHED content
-  owned by the platform tenant (visibility = public) or licensed via exam_licenses.
+- **Tenant-owned roots carry NOT NULL tenant_id:** content items/versions, media, attempts,
+  goals, imports, submissions, jobs, AI runs, conversations.
+- **Children inherit** tenant via parent unless tenant_id is needed for a composite FK.
+- **Composite FKs** `(tenant_id, x_id) → parent(tenant_id, id)` keep authoring graphs, media
+  links and workflow rows inside one tenant.
+- **Learner data → membership:** `(tenant_id, user_id) → tenant_memberships(tenant_id, user_id)`.
+- **Intentional cross-tenant edges (plain FKs, checked by service + future RLS):**
+   learner records → published content of the platform tenant (visibility public) or content
+  granted via `content_access_grants`; relation children → explicitly granted/public items.
   Content never references learner data.
-- **Phase 1** isolation = service layer always scopes by the session's active tenant.
-- **Future RLS:** `SET LOCAL app.tenant_id / app.user_id` per transaction; policy on each
-  tenant-owned root: `tenant_id = current_setting('app.tenant_id')::uuid` plus a read policy
-  for published public/licensed content. Child tables get `EXISTS (parent)` policies
-  (or a denormalized tenant_id if profiling demands). No RLS migration is generated now.
+- **Future RLS:** `SET LOCAL app.tenant_id / app.user_id`; policies on tenant-owned roots plus
+  a read policy for published public/granted content; children use EXISTS(parent) policies.
 
 ## Default platform tenant
-A seeded tenant (kind = platform, slug = 'engrisk') owns global content and all B2C
-learners' memberships. This avoids `tenant_id IS NULL` meaning "global" (which breaks
-uniqueness, composite FKs and RLS) and means B2B later is "add tenants", not "add tenant_id".
+A seeded tenant (kind = platform, slug = 'engrisk') owns global content and all B2C learners'
+memberships, so `tenant_id IS NULL` never means "global".
 
-## Content reuse & versioning (copy-on-write)
-- question_groups / questions are **immutable once published**. Editing a published row
-  creates a new row (version + 1, same lineage_id, supersedes_id → old) and marks the old
-  row 'superseded'. Old exam revisions keep pointing at the old row.
-- exams are stable catalog products; exam_revisions are **immutable published snapshots**
-  that list exact question versions (exam_revision_items).
-- attempts pin an exam_revision; responses pin an exact question version. Historical
-  results therefore never change when content is edited.
-- AI-generated questions use the SAME tables (origin = ai_generated + ai_run_id provenance).
+## Versioning & historical consistency
+- Editing published content = new version (based_on_version_id → source). Old parents and
+  old attempts keep pointing at the old version.
+- Attempts pin the root version (`attempts.content_version_id`) and immutable served manifest;
+   responses pin the question version AND served occurrence, even for repeated questions.
+   Saves use optimistic row revisions, not device-dependent last-write-wins.
+   Scores store the exact scoring-policy key that produced them.
+- AI-generated and imported content use the same tables (origin + ai_run_id / content_imports).
 
 ## Sensitive data
-- answer_key, rubric_key, explanation, transcript are server-only until the attempt
-  permits review (practice: after answering; mock: after submit). Enforce in API DTOs;
-  optionally with PostgreSQL column-level GRANTs for a read-only delivery role.
+- Protected (server-only until the disclosure policy allows): content_answer_specs.*,
+  content_media_timelines.cues / transcript_segments, content_comments of kind flag or review_decision,
+  content_reports.attempt_id. Enforce in API DTOs; optionally column/table GRANTs for a
+  read-only delivery role that cannot read protected tables at all.
 - Only password HASHES (argon2id) and token HASHES are stored. OAuth tokens are not stored.
-- Binary files live in object storage; PostgreSQL stores storage keys + metadata only.
+- Binary files live in object storage (R2 prod / MinIO local); PostgreSQL stores keys + metadata.
 
 ## Conventions
-- uuid PKs (`gen_random_uuid()`, PG13+). snake_case, plural tables, `<entity>_id` FKs.
-- timestamptz everywhere. `citext` for emails (extension `citext`).
-- DBML enums document allowed values; implement as `text + CHECK` (cheaper to evolve)
-  unless the set is truly frozen.
+- **ID strategy:** users.id = random 8-digit BIGINT; transactional/catalog IDs (tenants, roles, attempts, responses, evaluations, scores, ai_runs, conversations) = PostgreSQL-assigned BIGINT; content graph, media, source materials, auth sessions and async jobs = UUID.
+  BIGINT identifiers are assigned by the PostgreSQL database using identity/sequence (DBML `increment`); only users.id uses secure random-8 function. Child FK columns always match the referenced PK type. Composite PKs retain member-specific types.
+  jobs.target_key is TEXT because targets can have heterogeneous UUID/BIGINT IDs; handler validates type + key, NOT a foreign key. No implicit numeric casts or blind UUID parsing.
+  snake_case, plural table names, FK = `<referenced_entity>_id`, or `<role>_<entity>_id` when
+  the role matters (owner_user_id, parent_version_id, question_version_id).
+- timestamptz everywhere, named `*_at`; actors `*_by_user_id`; booleans `is_*`; counters
+  `*_count`; durations `*_ms` / `*_seconds`; ordering `position` (ascending within its scope).
+- Vocabulary columns:
+  - `kind`   immutable category of a row (content kind, asset kind, job kind, …)
+  - `schema_key` + `schema_version`  the typed JSON contract of a content version payload
+  - `status` lifecycle state;  `mode`  behaviour chosen per run (attempt mode)
+  - `role`   function of a participant or attachment in a relationship (credit, asset link)
+  - `purpose` why a file or AI run exists (drives access/cost policy)
+  - `code`   stable identifier of a row in a seeded catalog table (roles, permissions, skills)
+  - `*_key`  reference to a code-defined artefact that is NOT a table (scoring_policy_key,
+             rubric_key, schema_key, prompt_key, feature_key, section_key)
+  - `settings` authored configuration that changes behaviour; `metadata` system-observed
+    descriptive facts; `body` learner-visible document payload.
+- **Enum vs registry:** DBML Enums are used for closed state machines and security-relevant
+  values (implemented as `text + CHECK`, cheap to evolve). Open, extensible vocabularies —
+  content kind, schema_key, relation slot, asset link role, job kind, conversation kind,
+  feature keys — are `text` validated against a code registry, so new content types and
+  features need no schema change.
+- JSONB only for (a) schema_key-typed document payloads validated by Pydantic/JSON Schema,
+  (b) immutable snapshots, (c) small config blobs read as a whole. Never for relational facts
+  that are joined, filtered or aggregated (those get columns/tables).
 - Partial unique indexes are documented in index notes (DBML cannot express WHERE).
-- JSONB only for (a) type-specific question payloads validated by Pydantic schemas,
-  (b) immutable snapshots, (c) small config blobs. Never for relational facts.
 
-## Phase tags
-Every table note starts with [P1] … [P4] = roadmap phase in which the table is first needed.
 '''
 }
 
 // =============================================================================
-// ENUMS (documented value sets — see Conventions)
+// ENUMS (closed value sets — implemented as text + CHECK)
 // =============================================================================
 
 Enum user_kind {
@@ -103,9 +148,10 @@ Enum auth_provider {
   oidc [note: 'Future enterprise SSO per tenant']
 }
 
-Enum auth_token_purpose {
+Enum action_token_purpose {
   email_verification
   password_reset
+  tenant_invitation [note: 'Single-use email-bound invitation to tenant with assigned role']
 }
 
 Enum tenant_kind {
@@ -126,29 +172,33 @@ Enum membership_status {
 }
 
 Enum role_scope {
-  platform [note: 'Granted via platform_role_assignments; cross-tenant powers']
-  tenant [note: 'Granted via membership_roles; powers inside one tenant']
+  platform [note: 'Granted via role_assignments; cross-tenant powers']
+  tenant [note: 'Granted via role_assignments; powers inside one tenant']
 }
 
 Enum asset_kind {
   audio
   image
-  document
+  video [note: 'Future (lesson videos); storage pipeline identical']
+  document [note: 'PDF, CSV, ZIP packages, JSON manifests']
 }
 
 Enum asset_purpose {
-  question_media [note: 'Listening audio, charts, photos used by question_groups']
-  source_material [note: 'Learner/teacher upload used for AI generation']
-  learner_response [note: 'Speaking recordings']
+  content_media [note: 'Audio/images/documents placed in content versions (stimuli, section tracks, lesson media)']
+  cover [note: 'Cover image of a catalog item (exam, course, collection)']
+  source_material [note: 'Learner/teacher upload used for AI generation (source_materials)']
+  response_media [note: 'Learner answer media, e.g. speaking recordings']
   branding [note: 'Tenant logos']
-  exam_cover [note: 'Uploaded cover image for an exam card (optional; generated cover_style otherwise)']
   import_package [note: 'ZIP package (manifest + audio + images) uploaded to Content Studio import']
+  import_report [note: 'System-generated CSV validation report of an import']
+  delivery_manifest [note: 'Compiled learner-visible JSON of a published root version']
 }
 
 Enum asset_status {
   pending_upload
+  processing [note: 'Upload verified; scan / probe / transcode running']
   available
-  quarantined [note: 'Failed malware/content scan']
+  quarantined [note: 'Failed malware/content scan or checksum verification']
   deleted
 }
 
@@ -174,67 +224,10 @@ Enum skill_area {
   speaking
 }
 
-Enum content_status {
-  draft
-  in_review
-  published [note: 'Immutable from here on']
-  superseded [note: 'A newer version exists; still valid for old revisions']
-  archived [note: 'Not selectable for new exams']
-}
-
 Enum content_visibility {
   private [note: 'Owner only (owner_user_id)']
   tenant [note: 'Members of the owning tenant']
   public [note: 'Platform tenant only: whole platform catalog']
-}
-
-Enum content_origin {
-  human
-  ai_generated
-  imported
-}
-
-Enum question_type {
-  single_choice
-  multiple_choice
-  fill_blank
-  matching
-  ordering
-  short_answer
-  essay [note: 'IELTS Writing; evaluated, not key-graded']
-  speaking [note: 'IELTS Speaking; audio answer, evaluated']
-}
-
-Enum stimulus_type {
-  passage
-  audio
-  image
-  audio_image
-}
-
-Enum annotation_kind {
-  highlight [note: 'Learner-selected text range in a stimulus (IELTS on-computer tool; TOEIC practice only)']
-  note [note: 'Highlight + learner note text']
-}
-
-Enum exam_kind {
-  full_mock [note: 'Full timed test, always mock mode']
-  section_test [note: 'One section, e.g. TOEIC Reading Part 7']
-  practice_set [note: 'Short curated set, 5–15 min']
-  personal_practice [note: 'Built by a learner from own approved generated questions']
-}
-
-Enum exam_status {
-  draft
-  published
-  archived
-}
-
-Enum revision_status {
-  draft [note: 'Only editable state (Content Studio)']
-  scheduled [note: 'Passed publish checklist; frozen; promoted to published at publish_at']
-  published [note: 'Immutable']
-  retired [note: 'No new attempts; history intact']
 }
 
 Enum access_tier {
@@ -243,19 +236,37 @@ Enum access_tier {
   premium [note: 'Requires entitlement (future monetization)']
 }
 
-Enum exam_provenance {
-  engrisk_original [note: 'Authored by the Engrisk content team (platform tenant only). Catalog badge "Engrisk Original"']
-  tenant_authored [note: 'Authored by an organization (teacher / tenant content team); tenant-visible']
+Enum content_provenance {
+  engrisk_original [note: 'Authored by the Engrisk content team (platform tenant only). Badge "Engrisk Original"']
+  tenant_authored [note: 'Authored by an organization (teacher / tenant content team)']
   community [note: 'Contributed by a learner, published by the platform after moderation; always credited']
-  licensed_partner [note: 'Original material licensed from a publisher partner under contract (P4)']
+  licensed_partner [note: 'Material licensed from a publisher partner under contract (P4)']
+}
+
+Enum content_origin {
+  human
+  imported
+  ai_generated
+}
+
+Enum version_status {
+  draft [note: 'Only mutable state']
+  in_review [note: 'Frozen while a submission or AI-content review decides']
+  scheduled [note: 'Passed publish validation; frozen; promoted to published at publish_at']
+  published [note: 'Immutable. Old published versions stay valid for every parent/attempt pinning them']
+  retired [note: 'Immutable; not selectable for new placements or attempts; history intact']
+}
+
+Enum binding_mode {
+  pinned [note: 'Exact child version; mandatory inside exam/assessment subtrees']
+  latest_published [note: 'Child resolved to its current_published_version_id at read time (collections, course shelves)']
 }
 
 Enum submission_status {
-  draft [note: 'Contributor still editing; not visible to reviewers']
-  submitted [note: 'Frozen snapshot queued; auto-checks running/finished, no reviewer yet']
+  submitted [note: 'Frozen version queued; auto-checks running/finished, no reviewer yet']
   in_review [note: 'Assigned to a reviewer']
   changes_requested [note: 'Back to contributor with anchored comments; resubmission = new round']
-  approved [note: 'Revision published (or scheduled). Terminal']
+  approved [note: 'Version published (or scheduled). Terminal']
   rejected [note: 'Terminal; reason_code mandatory. Appeal = new submission referencing this one']
   withdrawn [note: 'Contributor withdrew before decision. Terminal']
 }
@@ -267,11 +278,11 @@ Enum review_decision {
 }
 
 Enum import_status {
-  uploaded [note: 'Package stored (content_assets.purpose = import_package), scan pending']
+  uploaded [note: 'Package stored (media_assets.purpose = import_package), scan pending']
   validating [note: 'Manifest parsing + per-row validation + asset matching']
   validated [note: 'Report ready; user may create the draft — rows with errors are skipped, warnings kept']
-  failed [note: 'Package unreadable / malware / package-level errors; see errors']
-  completed [note: 'Draft exam + revision + questions created']
+  failed [note: 'Package unreadable / malware / package-level errors']
+  completed [note: 'Draft root item + version + children created']
 }
 
 Enum credit_role {
@@ -284,7 +295,19 @@ Enum credit_role {
 
 Enum contribution_license {
   platform_nonexclusive [note: 'Contributor keeps copyright; grants Engrisk a worldwide, non-exclusive, royalty-free licence to host, adapt (format/fix) and distribute; revocable for future distribution']
-  cc_by_4_0 [note: 'Creative Commons Attribution 4.0; attribution via exam_credits']
+  cc_by_4_0 [note: 'Creative Commons Attribution 4.0; attribution via content_credits']
+}
+
+Enum comment_kind {
+  review_decision [note: 'Immutable moderator decision event, linked to a submission round']
+  comment [note: 'Human discussion (reviewer, contributor, co-author)']
+  flag [note: 'Quality finding from a validator or AI quality check; staff/author-only']
+}
+
+Enum report_status {
+  open
+  resolved
+  dismissed
 }
 
 Enum attempt_mode {
@@ -302,6 +325,11 @@ Enum attempt_status {
 Enum submit_reason {
   learner
   time_expired
+}
+
+Enum annotation_kind {
+  highlight [note: 'Learner-selected text range in a stimulus']
+  note [note: 'Highlight + learner note text']
 }
 
 Enum evaluator_kind {
@@ -328,18 +356,7 @@ Enum goal_status {
   archived
 }
 
-Enum ai_purpose {
-  explanation
-  tutor_reply
-  writing_evaluation
-  speaking_evaluation
-  transcription
-  question_generation
-  audio_alignment [note: 'Forced alignment of section audio ↔ script → revision_audio_tracks.cues']
-  originality_check [note: 'Similarity / copyright fingerprint screening of submissions → content_submissions.auto_checks']
-}
-
-Enum ai_run_status {
+Enum execution_status {
   queued
   running
   succeeded
@@ -347,10 +364,25 @@ Enum ai_run_status {
   cancelled
 }
 
-Enum message_sender {
-  learner
-  tutor
-  system
+Enum ai_purpose {
+  explanation
+  tutor_reply
+  writing_evaluation
+  speaking_evaluation
+  transcription
+  question_generation
+  audio_alignment [note: 'Forced alignment of audio ↔ transcript → content_media_timelines']
+  speech_synthesis [note: 'TTS for listening drafts']
+  originality_check [note: 'Similarity / copyright screening of submissions']
+  quality_check [note: 'AI quality flags → content_comments (kind flag)']
+  content_assist [note: 'Draft/translate explanations, alt text, skill-tag suggestions']
+  material_extraction [note: 'OCR / structure extraction from source materials']
+}
+
+Enum message_role {
+  user [note: 'The learner']
+  assistant [note: 'AI reply; always carries ai_run_id']
+  system [note: 'Context/grounding notices shown in the thread']
 }
 
 // =============================================================================
@@ -358,16 +390,17 @@ Enum message_sender {
 // =============================================================================
 
 Table users {
-  id uuid [pk, default: `gen_random_uuid()`]
+  id bigint [pk, default: `public.generate_random_user_id()`, note: 'Globally unique random 8-digit number (10000000..99999999), NOT sequence. PK and user FK target; database PK enforces uniqueness, callers retry on ID collision.']
   kind user_kind [not null, default: 'registered']
   status user_status [not null, default: 'active']
   email citext [note: 'Primary contact/login email. NULL for guests. Unique when not null']
   email_verified_at timestamptz
   display_name text
-  avatar_url text [note: 'External URL (e.g. Google picture) or signed URL; no binary']
-  locale text [not null, default: 'vi-VN']
+  avatar_url text [note: 'External URL (e.g. Google picture); no binary']
+  locale text [not null, default: 'vi', note: 'BCP 47 UI language (vi | en), same code the API exposes']
   timezone text [not null, default: 'Asia/Ho_Chi_Minh']
   preferences jsonb [not null, default: `'{}'::jsonb`, note: '{"study_reminder":{"enabled":true,"time":"20:00"}} — small personal settings read as a whole']
+  platform_permissions_version integer [not null, default: 1, note: 'Bumped on role_assignments change; part of the access-token ver claim']
   registered_at timestamptz [note: 'Set when a guest converts or a user signs up']
   last_seen_at timestamptz
   created_at timestamptz [not null, default: `now()`]
@@ -380,18 +413,19 @@ Table users {
 
   checks {
     `kind = 'guest' OR email IS NOT NULL` [name: 'ck_users_registered_has_email']
+    `id BETWEEN 10000000 AND 99999999` [name: 'ck_users_id_random8']
   }
 
   Note: '''
 [P1] Global person identity. Holds NO credentials, NO roles, NO tenant data.
-Guest → account conversion keeps the same users.id (kind guest → registered + new
+Guest → account conversion keeps the same 8-digit users.id (kind guest → registered + new
 auth_identity), so attempts made as a guest need no data migration.
 '''
 }
 
 Table auth_identities {
-  id uuid [pk, default: `gen_random_uuid()`]
-  user_id uuid [not null, ref: > users.id]
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  user_id bigint [not null, ref: > users.id]
   provider auth_provider [not null]
   provider_subject text [not null, note: 'Google "sub"; for password = normalized email']
   provider_email citext [note: 'Email asserted by the provider at last login']
@@ -412,14 +446,13 @@ Table auth_identities {
   Note: '''
 [P1] How a user proves who they are. N identities → 1 user (email+password, Google, future
 Apple/Microsoft/tenant OIDC). Adding a provider = new enum value + adapter; users unchanged.
-Account linking: a verified Google email matching users.email links after re-auth.
 '''
 }
 
 Table auth_sessions {
   id uuid [pk, default: `gen_random_uuid()`]
-  user_id uuid [not null, ref: > users.id]
-  active_tenant_id uuid [not null, note: 'Tenant context for this session; switching tenants updates this']
+  user_id bigint [not null, ref: > users.id]
+  active_tenant_id bigint [not null, note: 'Tenant context for this session; switching tenants updates this']
   refresh_token_hash bytea [not null, note: 'SHA-256 of opaque rotating refresh token']
   user_agent text
   ip_address inet
@@ -434,139 +467,159 @@ Table auth_sessions {
   }
 
   Note: '''
-[P1] Refresh-token session (access tokens are short-lived JWTs carrying user_id +
-active_tenant_id). Composite FK to tenant_memberships ensures the active tenant is one the
-user belongs to. Tenant switch = membership check + update active_tenant_id + new access token.
+[P1] Refresh-token session (access tokens are short-lived JWTs carrying sub, sid, tid, ver).
+Composite FK to tenant_memberships ensures the active tenant is one the user belongs to.
 '''
 }
 
-Table auth_tokens {
-  id uuid [pk, default: `gen_random_uuid()`]
-  user_id uuid [not null, ref: > users.id]
-  purpose auth_token_purpose [not null]
+Table action_tokens {
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  purpose action_token_purpose [not null, note: 'email_verification | password_reset | tenant_invitation']
+  user_id bigint [ref: > users.id, note: 'Required for account verification/reset; NULL for invitations addressed to email']
+  tenant_id bigint [ref: > tenants.id, note: 'Only for tenant_invitation']
+  email citext [note: 'Recipient email for tenant_invitation']
+  role_id bigint [ref: > roles.id, note: 'Role granted when accepting invitation']
+  role_scope role_scope [note: 'Always tenant for invitation; used in composite FK']
   token_hash bytea [not null]
+  issued_by_user_id bigint [ref: > users.id, note: 'Inviter; NULL for password reset/verification']
+  consumed_by_user_id bigint [ref: > users.id, note: 'Actual member who accepted invitation']
   expires_at timestamptz [not null]
   consumed_at timestamptz
+  revoked_at timestamptz
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
-    token_hash [unique, name: 'uq_auth_tokens_token_hash']
-    (user_id, purpose) [name: 'ix_auth_tokens_user_purpose']
+    token_hash [unique, name: 'uq_action_tokens_hash']
+    (user_id, purpose) [name: 'ix_action_tokens_user_purpose']
+    (tenant_id, email, purpose) [name: 'ix_action_tokens_invite_lookup']
   }
 
-  Note: '[P1] Single-use email verification and password reset tokens (hash only).'
+  checks {
+    `(purpose = 'tenant_invitation' AND user_id IS NULL AND tenant_id IS NOT NULL AND email IS NOT NULL AND role_id IS NOT NULL AND role_scope = 'tenant' AND issued_by_user_id IS NOT NULL) OR (purpose <> 'tenant_invitation' AND user_id IS NOT NULL AND tenant_id IS NULL AND email IS NULL AND role_id IS NULL AND role_scope IS NULL AND issued_by_user_id IS NULL)` [name: 'ck_action_tokens_purpose_shape']
+    `consumed_at IS NULL OR consumed_at >= created_at` [name: 'ck_action_tokens_consumption']
+    `consumed_at IS NULL OR revoked_at IS NULL` [name: 'ck_action_tokens_final_state']
+    `consumed_by_user_id IS NULL OR (purpose = 'tenant_invitation' AND consumed_at IS NOT NULL)` [name: 'ck_action_tokens_acceptor']
+  }
+
+  Note: '''
+[P1 account / P4 invitations] Shared single-use token lifecycle: verification, reset, and tenant invitation.
+Never store plaintext tokens. Enforce expiration, email-bound acceptance, matching role tenant,
+active inviter permission, and single-use CAS during consumption. Consumption is audited here.
+Purpose-specific CHECK prevents nullable columns becoming an unstructured EAV model.
+'''
 }
 
 Table roles {
-  id uuid [pk, default: `gen_random_uuid()`]
-  tenant_id uuid [ref: > tenants.id, note: 'NULL = system role (seeded). Set = tenant custom role (P4)']
-  key text [not null, note: 'learner, teacher, content_manager, tenant_admin, platform_admin, platform_support']
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  tenant_id bigint [ref: > tenants.id, note: 'NULL = system role (seeded). Set = tenant custom role (P4)']
+  code text [not null, note: 'learner, teacher, content_manager, tenant_admin, platform_admin, platform_support']
   name text [not null]
   scope role_scope [not null]
   description text
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (tenant_id, key) [unique, name: 'uq_roles_tenant_key', note: 'PG15+: NULLS NOT DISTINCT; on PG14 add partial unique (key) WHERE tenant_id IS NULL']
+    (tenant_id, code) [unique, name: 'uq_roles_tenant_code', note: 'PG15+: NULLS NOT DISTINCT; on PG14 add partial unique (code) WHERE tenant_id IS NULL']
     (id, scope) [unique, name: 'uq_roles_id_scope', note: 'Target of scope-checked composite FKs']
   }
 
   Note: '''
 [P1] RBAC role = named bundle of permissions. Roles never appear as columns on business
 tables. Seeded P1: learner; content_manager (granted inside the PLATFORM tenant to the
-Engrisk content team, so platform content is authored like any tenant content);
-platform_admin, platform_support (platform scope). Seeded P4: teacher, tenant_admin.
-P3 adds submission.create to learner and content.import/content.review to content_manager;
-P4 teacher gets content.author, content.import, content.publish_tenant, content.review_tenant.
-Tenant-defined roles are a P4 extension (tenant_id set).
+Engrisk content team); platform_admin, platform_support (platform scope).
+Seeded P4: teacher, tenant_admin. Tenant-defined roles are a P4 extension (tenant_id set).
 '''
 }
 
 Table permissions {
-  id uuid [pk, default: `gen_random_uuid()`]
-  key text [not null, unique, note: 'resource.action, e.g. exam.take, content.publish, member.manage']
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  code text [not null, unique, note: 'resource.action, e.g. attempt.create, content.publish, member.manage']
   scope role_scope [not null]
   description text
 
+  indexes {
+    (id, scope) [unique, name: 'uq_permissions_id_scope', note: 'Composite scope FK target']
+  }
+
   Note: '''
 [P1] Permission catalog, seeded from code. Checked by FastAPI dependencies, never by role name.
-Content ecosystem keys (all tenant scope; effective only in the session's active tenant):
-- content.author          create/edit drafts, upload audio/images, scripts (content_manager P1, teacher P4)
-- content.import          upload + validate import packages (content_import_jobs) (content_manager P3, teacher P4)
-- content.review          moderation queue of the platform tenant: community + internal submissions (content_manager P3)
-- content.publish         publish revisions with visibility public (platform tenant only) (content_manager P1)
-- content.publish_tenant  publish revisions with visibility tenant inside own organization (teacher P4)
-- content.review_tenant   review submissions targeting own organization (teacher/tenant_admin P4)
-- submission.create       learner creates community drafts + submits for review (learner P3)
-Service rules: nobody decides their own submission (submission_reviews.reviewer ≠ submitter);
-content.publish never implies bypassing review for community provenance.
+Content keys (tenant scope; effective only in the session's active tenant):
+content.author · content.import · content.review · content.publish (platform tenant, public) ·
+content.publish_tenant · content.review_tenant · submission.create.
+Service rules: nobody decides their own submission; content.publish never bypasses review
+for community provenance.
 '''
 }
 
 Table role_permissions {
-  role_id uuid [not null, ref: > roles.id]
-  permission_id uuid [not null, ref: > permissions.id]
+  role_id bigint [not null, ref: > roles.id]
+  permission_id bigint [not null, ref: > permissions.id]
+  role_scope role_scope [not null, note: 'Enforced to equal BOTH role and permission scope by composite FKs']
 
   indexes {
     (role_id, permission_id) [pk]
   }
 
-  Note: '[P1] Role ↔ permission. Platform-scope permissions may only attach to platform-scope roles (seed check).'
+  Note: '[P1] Role ↔ permission. Composite FK scope guards enforce matching role/permission scope in PostgreSQL; no seed-only security invariant.'
 }
 
-Table platform_role_assignments {
-  user_id uuid [not null, ref: > users.id]
-  role_id uuid [not null]
-  role_scope role_scope [not null, default: 'platform']
-  granted_by_user_id uuid [ref: > users.id]
+Table role_assignments {
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  role_id bigint [not null]
+  role_scope role_scope [not null]
+  user_id bigint [ref: > users.id, note: 'Target for platform-scoped role']
+  membership_id bigint [ref: > tenant_memberships.id, note: 'Target for tenant-scoped role']
+  granted_by_user_id bigint [ref: > users.id]
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (user_id, role_id) [pk]
+    (user_id, role_id) [name: 'ix_role_assignments_platform_lookup', note: 'Partial UNIQUE WHERE role_scope = platform']
+    (membership_id, role_id) [name: 'ix_role_assignments_membership_lookup', note: 'Partial UNIQUE WHERE role_scope = tenant']
+    (role_id, role_scope) [name: 'ix_role_assignments_role']
   }
 
   checks {
-    `role_scope = 'platform'` [name: 'ck_platform_role_assignments_scope']
+    `(role_scope = 'platform' AND user_id IS NOT NULL AND membership_id IS NULL) OR (role_scope = 'tenant' AND membership_id IS NOT NULL AND user_id IS NULL)` [name: 'ck_role_assignments_target']
   }
 
   Note: '''
-[P1] Platform staff (platform_admin, platform_support). Kept separate from tenant
-membership so B2C learner membership in the platform tenant never implies staff power.
-Composite FK (role_id, role_scope) → roles(id, scope) makes assigning a tenant role here impossible.
+[P1] One role assignment model for platform staff and tenant members.
+Composite FK (role_id, role_scope) => roles (id, scope) disallows scope mismatch.
+For tenant custom roles, validate roles.tenant_id = membership.tenant_id, or roles.tenant_id IS NULL,
+under transaction/trigger before granting. CHECK and partial UNIQUE preserve assignment integrity.
 '''
 }
+
 
 // =============================================================================
 // 2. TENANCY
 // =============================================================================
 
 Table tenants {
-  id uuid [pk, default: `gen_random_uuid()`]
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
   kind tenant_kind [not null]
   status tenant_status [not null, default: 'active']
   slug text [not null, unique, note: 'URL-safe; platform tenant = engrisk']
   name text [not null]
-  branding jsonb [not null, default: `'{}'::jsonb`, note: '{display_name, logo_asset_id, accent_color, support_email}. Read as one blob, never queried']
-  default_locale text [not null, default: 'vi-VN']
+  default_locale text [not null, default: 'vi']
+  logo_asset_id uuid [note: 'media_assets(purpose = branding) of this tenant']
+  settings jsonb [not null, default: `'{}'::jsonb`, note: '{"branding":{"display_name","accent_color","support_email"}, "content_policy":{"requires_review":true}}. Read as one blob, never queried']
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
-  indexes {
-    kind [name: 'uq_tenants_single_platform', note: 'Partial unique: (kind) WHERE kind = platform — exactly one platform tenant']
-  }
-
   Note: '''
 [P1 seeded / P4 self-serve] Organization boundary. Phase 1 has exactly one row (platform).
-Branding lives in JSONB because it is presentation config read as a whole; the UI maps
-accent_color onto the HeroUI --accent token. Custom domains (P4) → future tenant_domains table.
+settings holds presentation (HeroUI --accent mapping) and tenant policies such as
+"teacher content requires review". Custom domains (P4) → future tenant_domains table.
 '''
 }
 
 Table tenant_memberships {
-  id uuid [pk, default: `gen_random_uuid()`]
-  tenant_id uuid [not null, ref: > tenants.id]
-  user_id uuid [not null, ref: > users.id]
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  tenant_id bigint [not null, ref: > tenants.id]
+  user_id bigint [not null, ref: > users.id]
   status membership_status [not null, default: 'active']
+  permissions_version integer [not null, default: 1, note: 'Bumped on role assignment/status change or when a granted role changes; part of the access-token ver claim']
   joined_at timestamptz [not null, default: `now()`]
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
@@ -577,37 +630,15 @@ Table tenant_memberships {
   }
 
   Note: '''
-[P1] A user belongs to N tenants. Phase 1: signup (and guest creation) auto-creates a
-membership in the platform tenant with role learner. Memberships are never hard-deleted
-(status = left) so historical attempts keep a valid parent.
+[P1] A user belongs to N tenants. Signup (and guest creation) auto-creates a membership in the
+platform tenant with role learner. Never hard-deleted (status = left) so history keeps a parent.
 '''
 }
 
-Table membership_roles {
-  membership_id uuid [not null, ref: > tenant_memberships.id]
-  role_id uuid [not null]
-  role_scope role_scope [not null, default: 'tenant']
-  granted_by_user_id uuid [ref: > users.id]
-  created_at timestamptz [not null, default: `now()`]
-
-  indexes {
-    (membership_id, role_id) [pk]
-  }
-
-  checks {
-    `role_scope = 'tenant'` [name: 'ck_membership_roles_scope']
-  }
-
-  Note: '''
-[P1] Tenant-scoped role grants (a teacher can also be content_manager). Composite FK
-(role_id, role_scope) → roles(id, scope) blocks granting platform roles via membership.
-App rule: a custom role (roles.tenant_id set) must belong to the membership's tenant.
-'''
-}
 
 Table tenant_entitlements {
-  tenant_id uuid [not null, ref: > tenants.id]
-  feature_key text [not null, note: 'ai_tutor, writing_ai_feedback, speaking_ai_feedback, material_upload, question_generation, platform_library, custom_branding']
+  tenant_id bigint [not null, ref: > tenants.id]
+  feature_key text [not null, note: 'Code registry: ai_tutor, writing_ai_feedback, speaking_ai_feedback, material_upload, question_generation, platform_library, custom_branding']
   is_enabled boolean [not null, default: true]
   limits jsonb [not null, default: `'{}'::jsonb`, note: 'e.g. {"ai_requests_per_user_per_day": 30}']
   source text [not null, default: 'plan', note: 'plan | override | trial']
@@ -619,71 +650,64 @@ Table tenant_entitlements {
   }
 
   Note: '''
-[P1 seeded for platform tenant] Effective feature switches per tenant. Plans/billing live in
-code/config until monetization (future: plans + subscriptions tables, incl. B2C user-level
-premium). Feature checks read entitlements, never plan names.
+[P1 seeded for platform tenant] Effective feature switches per tenant. Usage is derived from
+jobs/ai_runs. Plans/billing stay in code until monetization (future plans + subscriptions).
 '''
 }
 
-Table tenant_invitations {
-  id uuid [pk, default: `gen_random_uuid()`]
-  tenant_id uuid [not null, ref: > tenants.id]
-  email citext [not null]
-  role_id uuid [not null, ref: > roles.id]
-  token_hash bytea [not null]
-  invited_by_user_id uuid [not null, ref: > users.id]
-  expires_at timestamptz [not null]
-  accepted_at timestamptz
-  accepted_by_user_id uuid [ref: > users.id]
-  revoked_at timestamptz
-  created_at timestamptz [not null, default: `now()`]
-
-  indexes {
-    token_hash [unique, name: 'uq_tenant_invitations_token_hash']
-    (tenant_id, email) [name: 'ix_tenant_invitations_tenant_email']
-  }
-
-  Note: '[P4] Join-organization flow. Acceptance creates tenant_memberships + membership_roles. Role must be tenant-scope (checked at acceptance).'
-}
 
 // =============================================================================
-// 3. CONTENT ASSETS & LEARNER UPLOADS
+// 3. MEDIA (object storage) & SOURCE MATERIALS
 // =============================================================================
 
-Table content_assets {
+Table media_assets {
   id uuid [pk, default: `gen_random_uuid()`]
-  tenant_id uuid [not null, ref: > tenants.id]
-  owner_user_id uuid [ref: > users.id, note: 'Uploader; NULL for system-imported media']
+  tenant_id bigint [not null, ref: > tenants.id]
+  owner_user_id bigint [ref: > users.id, note: 'Uploader; NULL for system-generated files']
   kind asset_kind [not null]
   purpose asset_purpose [not null]
   status asset_status [not null, default: 'pending_upload']
-  storage_key text [not null, note: 'Object storage key (S3/GCS compatible). Served via short-lived signed URLs after authz']
+  storage_key text [not null, note: 'Master object key (R2/MinIO, S3 API). Never exposed; served via short-lived signed URLs after authz']
+  original_filename text [note: 'Sanitized client file name (display only, never part of the key)']
   mime_type text [not null]
   byte_size bigint
-  sha256 bytea [note: 'Dedup + integrity']
-  duration_ms integer [note: 'Audio only']
-  metadata jsonb [not null, default: `'{}'::jsonb`, note: 'width/height, page_count, scan result']
+  sha256 bytea [note: 'Integrity + dedup']
+  duration_ms integer [note: 'Audio/video only']
+  metadata jsonb [not null, default: `'{}'::jsonb`, note: 'System-observed facts: {width, height, page_count, scan, audio:{sample_rate_hz, channels, loudness_lufs, true_peak_dbtp, silence_head_ms, clipping_samples}}. Audio QC publish gates read this']
+  upload jsonb [note: 'In-flight upload only: {strategy: single|multipart, multipart_upload_id, part_size_bytes, part_count, expected_byte_size, expected_sha256, expected_mime, context, expires_at}; cleared when available']
+  variants jsonb [not null, default: `'{}'::jsonb`, note: 'Renditions: {"aac_96k": {key, mime_type, byte_size, duration_ms}, "webp_640": {...}}']
   created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
   deleted_at timestamptz
 
   indexes {
-    storage_key [unique, name: 'uq_content_assets_storage_key']
-    (tenant_id, id) [unique, name: 'uq_content_assets_tenant_id', note: 'Composite FK target']
-    (tenant_id, owner_user_id, purpose) [name: 'ix_content_assets_owner']
+    storage_key [unique, name: 'uq_media_assets_storage_key']
+    (tenant_id, id) [unique, name: 'uq_media_assets_tenant_id', note: 'Composite FK target']
+    (tenant_id, owner_user_id, purpose) [name: 'ix_media_assets_owner']
+    (tenant_id, sha256) [name: 'ix_media_assets_digest', note: 'Optional dedup candidate lookup; NOT globally unique because rights/purposes differ']
+    (status, updated_at) [name: 'ix_media_assets_cleanup', note: 'Partial: WHERE status IN (pending_upload, processing, quarantined) — cleanup sweeper']
+  }
+
+  checks {
+    `duration_ms IS NULL OR duration_ms > 0` [name: 'ck_media_assets_duration']
+    `byte_size IS NULL OR byte_size >= 0` [name: 'ck_media_assets_size']
   }
 
   Note: '''
-[P1] Every binary file (listening audio, images, PDFs, speaking recordings, logos).
-Access is decided by the referencing entity (question_group, source_material, response),
-never by the asset alone. Upload flow: create row (pending_upload) → presigned PUT →
-scan → available | quarantined.
+[P1] Every binary file (audio, images, PDFs, recordings, logos, import packages/reports,
+delivery assets). Access is decided by the referencing entity (content version link,
+source material, response, tenant logo), never by the asset alone. Upload: row (pending_upload)
+→ presigned PUT/multipart → processing (scan/probe/transcode) → available | quarantined.
+Measured audio QC lives in metadata because it is a property of the immutable file.
+Published / historically served media cannot be hard-deleted even if a tenant archives it;
+implement reference-aware retention and short-lived signed access per allowed context.
 '''
 }
 
 Table source_materials {
   id uuid [pk, default: `gen_random_uuid()`]
-  tenant_id uuid [not null, ref: > tenants.id]
-  owner_user_id uuid [not null]
+  tenant_id bigint [not null, ref: > tenants.id]
+  owner_user_id bigint [not null]
   asset_id uuid [not null]
   title text [not null]
   rights_basis rights_basis [not null]
@@ -702,437 +726,464 @@ Table source_materials {
 
   Note: '''
 [P3] A learning document uploaded to generate practice. Always private to its owner.
-Lifecycle: uploaded → processing → ready | failed | rejected. Questions generated from it
-start as private drafts; it NEVER feeds the public bank automatically. Material with
-rights_basis = personal_study_only can never back tenant/public content (service rule).
+Lifecycle: uploaded → processing → ready | failed | rejected. Content generated from it starts
+as private drafts (content_item_versions.source_material_id) and never feeds the public bank
+automatically. rights_basis = personal_study_only can never back tenant/public content.
+Specialized (not a content item) because it has its own rights + extraction lifecycle.
 '''
 }
 
 // =============================================================================
-// 4. EXAM CONTENT (question bank + exams)
+// 4. REFERENCE DATA (global, code-seeded)
 // =============================================================================
 
 Table exam_types {
-  id uuid [pk, default: `gen_random_uuid()`]
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
   code text [not null, unique, note: 'toeic_lr, ielts_academic, ielts_general; later toeic_sw, cambridge_*']
-  name text [not null]
-  scoring_policy_key text [not null, note: 'Code-defined scorer, e.g. toeic_lr_v1, ielts_v1']
+  name text [not null, note: 'English fallback; localized names served from the code i18n catalog keyed by code']
+  scoring_policy_key text [not null, note: 'Default code-defined scorer, e.g. toeic_lr_v1, ielts_v1; pinned per version at publish']
   score_scale jsonb [not null, note: 'UI bounds for goals: {"min":10,"max":990,"step":5} or {"min":0,"max":9,"step":0.5}']
   is_active boolean [not null, default: true]
 
   Note: '''
-[P1] Global catalog of exam formats. A new format = new row + scorer + section layout in
-exam_revisions.sections — no new tables. Tenant-defined exam types are not supported yet.
+[P1] Global catalog of standardized test formats — a genuinely specific domain concept (score
+scale + scorer). A new format = new row + scorer + section schema_keys; no new tables.
 '''
 }
 
 Table skills {
-  id uuid [pk, default: `gen_random_uuid()`]
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
   code text [not null, unique, note: 'e.g. reading.inference, grammar.verb_tense, toeic.part2.question_response']
-  name text [not null]
-  area skill_area [not null]
-  exam_type_id uuid [ref: > exam_types.id, note: 'NULL = cross-exam skill (grammar, vocabulary, inference)']
-  parent_id uuid [ref: > skills.id]
+  name text [not null, note: 'English fallback; localized via code i18n catalog']
+  area skill_area [note: 'NULL for cross-area skills like grammar/vocabulary; specific area when the competency is modality-specific']
+  exam_type_id bigint [ref: > exam_types.id, note: 'NULL = cross-exam skill (grammar, vocabulary, inference)']
+  parent_id bigint [ref: > skills.id]
   position smallint [not null, default: 0]
   is_active boolean [not null, default: true]
 
   indexes {
     (area, exam_type_id) [name: 'ix_skills_area_exam_type']
+    parent_id [name: 'ix_skills_parent']
   }
 
   Note: '''
-[P1] Global skill taxonomy (2 levels in practice). Replaces a separate tags system:
-everything we analyse ("weak skills") is a skill. Free-form topics are not modeled.
+[P1] Global skill taxonomy (tree). No dependency on mutable section labels or JSONB keys.
+Area can be NULL for a truly cross-area skill. Validate no parent cycles. A skill is assigned
+to a content version; a syllabus/part is a content item rather than a skill.
 '''
 }
 
-Table question_groups {
+// =============================================================================
+// 5. CONTENT GRAPH (Core V2: versioned content graph)
+// =============================================================================
+
+Table content_items {
   id uuid [pk, default: `gen_random_uuid()`]
-  tenant_id uuid [not null, ref: > tenants.id]
-  lineage_id uuid [not null, note: 'Stable identity across versions (= id of version 1)']
-  version integer [not null, default: 1]
-  supersedes_id uuid [ref: > question_groups.id]
-  exam_type_id uuid [ref: > exam_types.id]
-  stimulus_type stimulus_type [not null]
+  tenant_id bigint [not null, ref: > tenants.id]
+  kind text [not null, note: 'Code registry of broad structural kinds: collection | exam | section | block | stimulus | question; later course | module | lesson | flashcard_deck. Immutable']
+  exam_type_id bigint [ref: > exam_types.id, note: 'Required for kind = exam. NULL for reusable / cross-format components']
+  slug text [note: 'Stable URL key; required for catalog roots, NULL for internal components']
+  visibility content_visibility [not null, default: 'tenant']
+  access_tier access_tier [not null, default: 'registered']
+  provenance content_provenance [note: 'Catalog trust label for publishable roots; set by the service from tenant kind + creator role; immutable after first publish. NULL for components']
+  owner_user_id bigint [note: 'Private owner (personal practice, community draft); NULL for tenant/platform-authored content']
+  current_published_version_id uuid [note: 'Version served to NEW attempts/placements; atomically promoted at publish']
+  created_by_user_id bigint [ref: > users.id]
+  archived_at timestamptz [note: 'Hidden from catalog and pickers; history intact']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (tenant_id, id) [unique, name: 'uq_content_items_tenant_id']
+    (tenant_id, kind, slug) [unique, name: 'uq_content_items_tenant_kind_slug', note: 'Partial: WHERE slug IS NOT NULL']
+    (tenant_id, kind, exam_type_id, visibility) [name: 'ix_content_items_catalog', note: 'Partial: WHERE archived_at IS NULL AND current_published_version_id IS NOT NULL']
+    (tenant_id, owner_user_id) [name: 'ix_content_items_owner', note: 'Partial: WHERE owner_user_id IS NOT NULL']
+    (tenant_id, provenance) [name: 'ix_content_items_provenance', note: 'Partial: WHERE provenance IS NOT NULL — catalog sections "Từ cộng đồng" / tenant shelf']
+  }
+
+  checks {
+    `visibility <> 'private' OR owner_user_id IS NOT NULL` [name: 'ck_content_items_private_owner']
+    `kind <> 'exam' OR exam_type_id IS NOT NULL` [name: 'ck_content_items_exam_type']
+  }
+
+  Note: '''
+[P1] One logical object, stable across versions and reused in many parent trees (NO parent_id).
+Operational state (visibility, access tier, provenance, archival, published pointer) lives here;
+everything historical lives in versions. Visibility public only in the platform tenant;
+engrisk_original/community only in the platform tenant, tenant_authored only in organizations
+(service rules). Community drafts are private + owner = contributor until approved.
+Catalog listing = items ⋈ current published version (1:1 PK join); counters computed from aggregate views or on-demand cached projections.
+'''
+}
+
+Table content_item_versions {
+  id uuid [pk, default: `gen_random_uuid()`]
+  tenant_id bigint [not null]
+  item_id uuid [not null]
+  version_no integer [not null]
+  status version_status [not null, default: 'draft']
+  schema_key text [not null, note: 'Registry contract "<kind>.<variant>": exam.full_mock | exam.section_test | exam.practice_set | exam.personal_practice | section.timed | section.audio_paced | block.group | stimulus.passage | stimulus.audio | stimulus.image | stimulus.audio_image | question.single_choice | question.multiple_choice | question.fill_blank | question.matching | question.ordering | question.short_answer | question.essay | question.speaking | collection.shelf; later lesson.*, course.*. Prefix must equal item kind']
+  schema_version integer [not null, default: 1, note: 'Payload contract version; validated by Pydantic/JSON Schema']
   title text
-  content jsonb [not null, note: 'Passage rich text / instructions. Schema per stimulus_type']
-  audio_asset_id uuid
-  image_asset_id uuid
-  transcript text [note: 'PROTECTED: listening transcript, revealed only in review']
-  status content_status [not null, default: 'draft']
-  visibility content_visibility [not null, default: 'tenant']
-  owner_user_id uuid [note: 'Required when visibility = private']
+  body jsonb [not null, default: `'{}'::jsonb`, note: 'Learner-visible document only. Question: {stem, options[{key,text}], blanks, word_limit, prep_seconds}. Passage: {documents:[{title, kind, blocks:[{type,label,text}]}]}. Image: {alt}. Exam: {description}. Never answers or transcripts']
+  settings jsonb [not null, default: `'{}'::jsonb`, note: 'Versioned behaviour. Exam: {time_limit_seconds, presentation:{cover:{motif,tint,label}}}. Section: {key:"L", skill_area, time_limit_seconds, delivery:"audio_paced"|"timed", check_seconds, rules:{audio_replay, annotations}, directions}']
+  rollup jsonb [not null, default: `'{}'::jsonb`, note: 'Computed at publish for composite versions, immutable: {question_count, max_points, duration_seconds, section_keys[]}. Display only, never filtered']
+  difficulty smallint [note: '1..5 (UI 1–2 Easy, 3 Medium, 4–5 Hard); questions and catalog roots']
+  default_points numeric(7,2) [note: 'Scorable leaves; a placement may override']
+  scoring_policy_key text [note: 'Pinned scorer for assessment roots, copied from exam_types at publish']
   origin content_origin [not null, default: 'human']
-  ai_run_id uuid [ref: > ai_runs.id]
-  source_material_id uuid
-  created_by_user_id uuid [ref: > users.id]
+  ai_run_id bigint [ref: > ai_runs.id, note: 'Generation run when origin = ai_generated']
+  source_material_id uuid [note: 'Learner upload this version was generated from']
+  based_on_version_id uuid [note: 'Previous version of the SAME logical item; composite FK guarantees lineage. Cross-item copies create a new item and record provenance separately.']
+  change_note text [note: 'Release notes: Studio history + "Có gì mới" for learners']
+  publish_at timestamptz [note: 'Scheduled publish time (status = scheduled)']
   published_at timestamptz
+  published_by_user_id bigint [ref: > users.id, note: 'Human who published; for ai_generated content this is the approving reviewer']
+  created_by_user_id bigint [ref: > users.id]
   created_at timestamptz [not null, default: `now()`]
-  updated_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`, note: 'Bumped by any draft change incl. relations, asset links, timelines, answer specs → ETag']
 
   indexes {
-    (tenant_id, id) [unique, name: 'uq_question_groups_tenant_id']
-    (lineage_id, version) [unique, name: 'uq_question_groups_lineage_version']
-    (tenant_id, status, exam_type_id) [name: 'ix_question_groups_bank']
+    (tenant_id, id) [unique, name: 'uq_content_item_versions_tenant_id']
+    (item_id, id) [unique, name: 'uq_content_item_versions_item_id', note: 'Target of same-item composite FKs']
+    (item_id, version_no) [unique, name: 'uq_content_item_versions_number']
+    (item_id, status) [name: 'ix_content_item_versions_status', note: 'Add partial UNIQUE (item_id) WHERE status = draft — one mutable draft per item']
+    (tenant_id, schema_key, status, difficulty) [name: 'ix_content_item_versions_bank', note: 'Question bank / picker filters']
+    (status, publish_at) [name: 'ix_content_item_versions_scheduled', note: 'Partial: WHERE status = scheduled — publish scheduler']
+    source_material_id [name: 'ix_content_item_versions_source_material', note: 'Partial: WHERE source_material_id IS NOT NULL']
   }
 
   checks {
-    `visibility <> 'private' OR owner_user_id IS NOT NULL` [name: 'ck_question_groups_private_owner']
-    `origin <> 'ai_generated' OR ai_run_id IS NOT NULL` [name: 'ck_question_groups_ai_provenance']
+    `version_no > 0` [name: 'ck_content_item_versions_number']
+    `difficulty IS NULL OR difficulty BETWEEN 1 AND 5` [name: 'ck_content_item_versions_difficulty']
+    `default_points IS NULL OR default_points >= 0` [name: 'ck_content_item_versions_points']
+    `origin <> 'ai_generated' OR ai_run_id IS NOT NULL` [name: 'ck_content_item_versions_ai_provenance']
+    `status <> 'scheduled' OR publish_at IS NOT NULL` [name: 'ck_content_item_versions_scheduled_at']
+    `status NOT IN ('published','retired') OR published_at IS NOT NULL` [name: 'ck_content_item_versions_published_at']
   }
 
   Note: '''
-[P1] Shared stimulus for several questions: a reading passage (TOEIC Part 6/7, IELTS
-passage), a conversation audio (TOEIC Part 3/4), a chart (IELTS Writing Task 1).
-Standalone questions (TOEIC Part 2/5) have no group. Copy-on-write versioning: revising a
-published group clones the group AND its questions into a new version.
+[P1] Immutable-after-publish version of any content item. One table for exams, sections,
+groups, stimuli and all question types (type-specific shape = schema_key-typed body/settings,
+not sub-tables or EAV). Editing published content creates a new version; parents and attempts
+pinning the old version are unaffected. Triggers (outside DBML): reject changes to semantic fields of published/retired versions and all edits/deletes
+of their relations, asset links, timelines and answer specs; permit only the audited
+published → retired lifecycle transition (without changing content);
+schema_key prefix = item kind. One mutable draft per item; atomic publish validates and freezes
+the full assessment graph (all descendants pinned to published versions). AI-generated versions need a human publisher
+(published_by_user_id); private personal-practice content is approved by its owner.
 '''
 }
 
-Table questions {
+Table content_item_relations {
   id uuid [pk, default: `gen_random_uuid()`]
-  tenant_id uuid [not null, ref: > tenants.id]
-  lineage_id uuid [not null, note: 'Stable identity across versions; analytics aggregate by lineage']
-  version integer [not null, default: 1]
-  supersedes_id uuid [ref: > questions.id]
-  question_group_id uuid
-  group_position smallint [note: 'Order inside the group']
-  exam_type_id uuid [ref: > exam_types.id]
-  question_type question_type [not null]
-  prompt jsonb [not null, note: 'Learner-visible payload: stem, options [{key,text}], blanks, word limits, speaking prep/answer seconds. Schema per question_type']
-  answer_key jsonb [note: 'PROTECTED. {"choice":"B"} | {"accept":["..."]} | {"order":[...]}. NULL for essay/speaking']
-  rubric_key text [note: 'For essay/speaking: versioned rubric id, e.g. ielts_writing_task2_v1']
-  explanation jsonb [note: 'PROTECTED until review. Verified explanation {text, evidence_span}']
-  review_flags jsonb [not null, default: `'[]'::jsonb`, note: 'Reviewer-only quality flags from AI/validators, e.g. [{"code":"ambiguous_key","detail":"A and D plausible"}]. Never sent to learners']
-  difficulty smallint [not null, default: 3]
-  default_points numeric(5,2) [not null, default: 1]
-  status content_status [not null, default: 'draft']
-  visibility content_visibility [not null, default: 'tenant']
-  owner_user_id uuid [note: 'Required when visibility = private']
-  origin content_origin [not null, default: 'human']
-  ai_run_id uuid [ref: > ai_runs.id, note: 'Generation run when origin = ai_generated']
-  source_material_id uuid [note: 'Upload the question was generated from']
-  created_by_user_id uuid [ref: > users.id]
-  reviewed_by_user_id uuid [ref: > users.id, note: 'Human who approved for publication']
-  reviewed_at timestamptz
-  published_at timestamptz
+  tenant_id bigint [not null, note: 'Tenant of the parent version. The child may be a granted/public item of another tenant']
+  parent_version_id uuid [not null]
+  child_item_id uuid [not null, ref: > content_items.id]
+  child_version_id uuid [note: 'Exact child version when binding_mode = pinned; NULL when latest_published']
+  binding_mode binding_mode [not null, default: 'pinned']
+  slot text [not null, default: 'content', note: 'Registry: content (ordered structural/scorable children) | stimulus (shared material of a block) | instructions (non-scorable directions/examples)']
+  position integer [not null, note: 'Order inside (parent_version_id, slot). Global question numbers are compiled into the delivery manifest']
+  points_override numeric(7,2) [note: 'Placement-specific marks; NULL = child default_points']
+  settings jsonb [not null, default: `'{}'::jsonb`, note: 'Placement-only config, e.g. {"page_break":true,"optional":false}. Never child content or keys']
   created_at timestamptz [not null, default: `now()`]
-  updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (tenant_id, id) [unique, name: 'uq_questions_tenant_id']
-    (lineage_id, version) [unique, name: 'uq_questions_lineage_version']
-    (tenant_id, status, exam_type_id, question_type) [name: 'ix_questions_bank']
-    (question_group_id, group_position) [name: 'ix_questions_group']
-    source_material_id [name: 'ix_questions_source_material']
+    (parent_version_id, slot, position) [unique, name: 'uq_content_item_relations_order']
+    (tenant_id, parent_version_id) [name: 'ix_content_item_relations_parent']
+    child_item_id [name: 'ix_content_item_relations_usage', note: 'Where is this item used?']
+    child_version_id [name: 'ix_content_item_relations_child_version']
   }
 
   checks {
-    `difficulty BETWEEN 1 AND 5` [name: 'ck_questions_difficulty']
-    `visibility <> 'private' OR owner_user_id IS NOT NULL` [name: 'ck_questions_private_owner']
-    `origin <> 'ai_generated' OR ai_run_id IS NOT NULL` [name: 'ck_questions_ai_provenance']
-    `question_type IN ('essay','speaking') OR answer_key IS NOT NULL` [name: 'ck_questions_objective_has_key']
-    `question_type NOT IN ('essay','speaking') OR rubric_key IS NOT NULL` [name: 'ck_questions_subjective_has_rubric']
+    `position >= 0` [name: 'ck_content_item_relations_position']
+    `points_override IS NULL OR points_override >= 0` [name: 'ck_content_item_relations_points']
+    `(binding_mode = 'pinned') = (child_version_id IS NOT NULL)` [name: 'ck_content_item_relations_binding']
   }
 
   Note: '''
-[P1] ONE question bank for TOEIC, IELTS, human-authored, imported and AI-generated items.
-All 8 question types share this table; type-specific shape lives in prompt/answer_key JSONB
-(validated by Pydantic models keyed by question_type) instead of 8 sub-tables or EAV.
-Lifecycle: draft → in_review → published → superseded/archived. Published rows are
-immutable (enforced by service + optional trigger). AI-generated items additionally need
-reviewed_by_user_id before status = published (service rule; private personal-practice
-items are "reviewed" by their owner).
+[P1] Placements: ordered, versioned composition with reusable children (replaces
+exam_revision_items, questions.question_group_id and exam_revisions.sections). Parent is
+always an exact version and is frozen with it. Publish validation: no cycles, allowed kind
+transitions (registry), every descendant of an assessment root pinned + published, compatible
+exam types, grants for cross-tenant children, scoring/answer coverage, media status.
+A new draft root version clones the previous version's relations (copy-on-write).
+Do not deduplicate a child across placements: relation.id identifies each occurrence;
+unique (parent_version_id, slot, position) is the ordering invariant. A published root must
+resolve every dynamic descendant to pinned versions before creating its manifest.
 '''
 }
 
-Table question_skills {
-  question_id uuid [not null, ref: > questions.id]
-  skill_id uuid [not null, ref: > skills.id]
+Table content_version_assets {
+  id uuid [pk, default: `gen_random_uuid()`]
+  tenant_id bigint [not null]
+  content_version_id uuid [not null]
+  asset_id uuid [not null]
+  role text [not null, note: 'Registry: cover | image | audio | video | document. audio on a section version = continuous section track; on a stimulus = group clip']
+  position integer [not null, default: 0]
+  settings jsonb [not null, default: `'{}'::jsonb`, note: 'Learner-visible presentation: {caption, alt, crop, document_index}. Never storage keys or protected text']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (content_version_id, role, position) [unique, name: 'uq_content_version_assets_position']
+    asset_id [name: 'ix_content_version_assets_asset', note: 'Media authorization: which versions expose this asset?']
+  }
+
+  checks {
+    `position >= 0` [name: 'ck_content_version_assets_position']
+  }
+
+  Note: '''
+[P1] Media placed in a content version (replaces question_groups.audio/image_asset_id,
+exams.cover_asset_id and revision_audio_tracks.asset_id). One asset may be linked by many
+versions; storage metadata stays in media_assets. Same tenant as the version (composite FK).
+'''
+}
+
+Table content_media_timelines {
+  content_version_asset_id uuid [pk, note: 'One timeline per audio/video placement']
+  cues jsonb [not null, default: `'[]'::jsonb`, note: 'PROTECTED. [{relation_path:[relation_uuid,...], start_ms, end_ms, confidence, source}] — path resolves one exact occurrence, even if a question repeats within the same exam. Validate against pinned tree at publish']
+  transcript_segments jsonb [not null, default: `'[]'::jsonb`, note: 'PROTECTED. [{start_ms?, end_ms?, speaker:"M1"|"W1"|"N", accent:"us"|"uk"|"au"|"ca", text, item_ids:[]}] — English; times optional until aligned']
+  ai_run_id bigint [ref: > ai_runs.id, note: 'Last forced-alignment / synthesis run']
+  aligned_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  Note: '''
+[P1] Protected timing layer of a media placement: section-track cue maps (TOEIC L, IELTS
+Listening parts) and timed transcripts of group clips, in one model (replaces
+revision_audio_tracks.cues/script_segments and question_groups.transcript). Separate from
+content_version_assets.settings so delivery queries never read protected text. Copy-on-write
+with its version; immutable once the version is published. QC thresholds are publish gates
+evaluated against media_assets.metadata.audio.
+'''
+}
+
+Table content_answer_specs {
+  question_version_id uuid [pk, ref: > content_item_versions.id]
+  answer_key jsonb [note: 'Objective grading, server-only. {"type":"single_choice","choice":"B"} | {"type":"fill_blank","accept":[...]} | {"type":"matching","matches":{...}}. NULL for essay/speaking']
+  rubric_key text [note: 'Versioned evaluator rubric for essay/speaking, e.g. ielts_writing_task2_v1']
+  explanation jsonb [note: 'Disclosed in review only: {"texts":{"vi":"…","en":"…"}, "evidence":{"stimulus_item_id":…, "document_index":0, "start":120, "end":168, "quote":"…"}}']
+  grading_config jsonb [not null, default: `'{}'::jsonb`, note: 'Partial credit, case sensitivity, accepted variants policy']
+
+  checks {
+    `answer_key IS NOT NULL OR rubric_key IS NOT NULL` [name: 'ck_content_answer_specs_grading']
+  }
+
+  Note: '''
+[P1] PROTECTED grading data of a question version, physically outside learner-visible body.
+Read only by grading/review/authoring code paths (restricted role). Only question versions
+have specs (publish validator); objective schemas require answer_key, essay/speaking rubric_key.
+'''
+}
+
+Table content_version_skills {
+  content_version_id uuid [not null, ref: > content_item_versions.id]
+  skill_id bigint [not null, ref: > skills.id]
   is_primary boolean [not null, default: false]
 
   indexes {
-    (question_id, skill_id) [pk]
-    skill_id [name: 'ix_question_skills_skill']
-  }
-
-  Note: '[P1] Skill tagging that powers per-skill results, weak-skill detection and targeted practice. Copied with the question on new versions.'
-}
-
-Table exams {
-  id uuid [pk, default: `gen_random_uuid()`]
-  tenant_id uuid [not null, ref: > tenants.id]
-  exam_type_id uuid [not null, ref: > exam_types.id]
-  slug text [not null]
-  title text [not null]
-  description text
-  kind exam_kind [not null]
-  skill_focus skill_area [note: 'NULL = mixed / full test. Drives catalog skill filter']
-  difficulty smallint [not null, default: 3, note: 'UI: 1–2 Easy, 3 Medium, 4–5 Hard']
-  access_tier access_tier [not null, default: 'registered']
-  status exam_status [not null, default: 'draft']
-  visibility content_visibility [not null, default: 'tenant']
-  owner_user_id uuid [note: 'Learner who owns a personal_practice exam; community contributor while the draft is private']
-  provenance exam_provenance [not null, note: 'Catalog trust label. Set at creation by the service from tenant kind + creator role; immutable after first publish']
-  cover_asset_id uuid [note: 'Optional uploaded cover (content_assets.purpose = exam_cover). NULL → generated cover from cover_style']
-  cover_style jsonb [not null, default: `'{}'::jsonb`, note: 'Generated cover motif: {"motif":"answer_sheet"|"waveform"|"text_lines"|"passage_headings", "tint":"listening"|"reading"|"mixed", "label":"04"}. Derived defaults from exam_type + kind + skill_focus; theme tokens resolve colours client-side']
-  current_revision_id uuid [ref: - exam_revisions.id, note: 'Revision served to NEW attempts']
-  created_by_user_id uuid [ref: > users.id]
-  created_at timestamptz [not null, default: `now()`]
-  updated_at timestamptz [not null, default: `now()`]
-
-  indexes {
-    (tenant_id, id) [unique, name: 'uq_exams_tenant_id']
-    (tenant_id, slug) [unique, name: 'uq_exams_tenant_slug']
-    (tenant_id, status, exam_type_id, kind, skill_focus) [name: 'ix_exams_catalog']
-    (tenant_id, owner_user_id) [name: 'ix_exams_owner', note: 'Partial: WHERE owner_user_id IS NOT NULL']
-    (tenant_id, provenance, status) [name: 'ix_exams_provenance', note: 'Catalog sections "Từ cộng đồng" / tenant section']
-  }
-
-  checks {
-    `difficulty BETWEEN 1 AND 5` [name: 'ck_exams_difficulty']
-    `visibility <> 'private' OR owner_user_id IS NOT NULL` [name: 'ck_exams_private_owner']
-    `kind <> 'personal_practice' OR visibility = 'private'` [name: 'ck_exams_personal_is_private']
+    (content_version_id, skill_id) [pk]
+    skill_id [name: 'ix_content_version_skills_skill']
   }
 
   Note: '''
-[P1] Catalog product: "TOEIC Mini Mock 01", "IELTS Reading – Matching Headings Set 2".
-"Practice set" and "full mock" are the same entity with a different kind — one attempt
-engine, one catalog. Stable slug/URL; content lives in exam_revisions.
-Visibility public is only allowed for the platform tenant (service rule).
-[P3] provenance drives the catalog trust badge; engrisk_original and community are only valid
-in the platform tenant, tenant_authored only in organizations (service rule). Community drafts
-live in the platform tenant as visibility = private + owner_user_id = contributor until a
-submission is approved (then visibility = public). Rating average/count shown in the catalog
-is aggregated from exam_ratings (cached in the read model, not stored here).
+[P1] Skill tags on any version: question versions (per-skill results, weak skills, adaptive
+targeting) and catalog roots (skill filter = root skills of an area, replacing exams.skill_focus).
+At most one primary per version (partial UNIQUE (content_version_id) WHERE is_primary).
+Belongs to the exact version for reproducible history.
 '''
 }
 
-Table exam_revisions {
-  id uuid [pk, default: `gen_random_uuid()`]
-  tenant_id uuid [not null]
-  exam_id uuid [not null]
-  revision_number integer [not null]
-  status revision_status [not null, default: 'draft']
-  sections jsonb [not null, note: '[{key:"L", title, skill_area, time_limit_seconds, delivery:"audio_paced"|"timed", check_seconds:120, parts:[{key:"P1", title, directions, question_range:"1-6"}], rules:{audio_replay:false, annotations:false}}]']
-  time_limit_seconds integer [note: 'Total limit for mock; NULL = untimed practice']
-  question_count integer [not null, default: 0, note: 'Snapshot at publish (immutable) for catalog listing']
-  max_points numeric(7,2) [not null, default: 0, note: 'Snapshot at publish']
-  scoring_policy_key text [not null, note: 'Copied from exam_types at publish; pins the scorer version']
-  release_notes text [note: 'Shown in Studio history + to learners as "Có gì mới" (optional)']
-  based_on_revision_id uuid [ref: > exam_revisions.id, note: 'Revision this draft was cloned from; source of the publish diff summary']
-  publish_at timestamptz [note: 'Scheduled publish time (status = scheduled)']
-  published_at timestamptz
-  published_by_user_id uuid [ref: > users.id]
-  created_by_user_id uuid [ref: > users.id]
-  created_at timestamptz [not null, default: `now()`]
 
-  indexes {
-    (tenant_id, id) [unique, name: 'uq_exam_revisions_tenant_id']
-    (exam_id, revision_number) [unique, name: 'uq_exam_revisions_exam_number']
-    (exam_id, status) [name: 'ix_exam_revisions_status', note: 'Implement as partial UNIQUE (exam_id) WHERE status = draft (one draft per exam) + scheduler partial index WHERE status = scheduled']
-  }
+// =============================================================================
+// 6. CONTENT ECOSYSTEM (sharing, attribution, feedback, read models)
+// =============================================================================
 
-  checks {
-    `status <> 'scheduled' OR publish_at IS NOT NULL` [name: 'ck_exam_revisions_scheduled_at']
-  }
-
-  Note: '''
-[P1] Immutable published snapshot of an exam's structure. Sections are JSONB because
-they are tiny, immutable, always read with the revision and never referenced by FK
-(responses store section_key). Editing a published exam = new draft revision → publish →
-exams.current_revision_id moves. In-progress attempts finish on their pinned revision.
-[P3] Content Studio edits ONLY draft revisions (at most one draft per exam, partial unique
-(exam_id) WHERE status = 'draft'). Publishing runs the blocking checklist (content_studio_spec.md
-§9); scheduled revisions are promoted by a job at publish_at.
-'''
-}
-
-Table exam_revision_items {
-  id uuid [pk, default: `gen_random_uuid()`]
-  tenant_id uuid [not null]
-  exam_revision_id uuid [not null]
-  section_key text [not null, note: 'Matches exam_revisions.sections[].key (validated at publish)']
-  position integer [not null, note: 'Global display order = question number']
-  question_id uuid [not null, note: 'Exact question VERSION']
-  points numeric(5,2) [not null, default: 1]
-
-  indexes {
-    (exam_revision_id, position) [unique, name: 'uq_exam_revision_items_position']
-    (exam_revision_id, question_id) [unique, name: 'uq_exam_revision_items_question']
-    question_id [name: 'ix_exam_revision_items_question', note: 'Where is this question used?']
-  }
-
-  Note: '''
-[P1] Ordered questions in a revision. Same question version may appear in many
-revisions/exams (reuse). Groups are rendered from questions.question_group_id, so a
-practice set may pick a subset of a passage's questions. Composite FKs keep exam and
-questions in the same tenant.
-'''
-}
-
-Table exam_licenses {
-  id uuid [pk, default: `gen_random_uuid()`]
-  exam_id uuid [not null, ref: > exams.id]
-  licensee_tenant_id uuid [not null, ref: > tenants.id]
-  granted_by_user_id uuid [ref: > users.id]
+Table content_access_grants {
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  item_id uuid [not null, ref: > content_items.id, note: 'Granted root (exam, course, collection)']
+  grantee_tenant_id bigint [not null, ref: > tenants.id]
+  allowed_actions text[] [not null, default: `ARRAY['consume']::text[]`, note: 'Registry values: consume (serve/attempt) | embed (place into a new authored tree). Always validate both permissions at publish and read.']
+  granted_by_user_id bigint [ref: > users.id]
   starts_at timestamptz [not null, default: `now()`]
   ends_at timestamptz
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (exam_id, licensee_tenant_id) [unique, name: 'uq_exam_licenses_exam_tenant']
-    licensee_tenant_id [name: 'ix_exam_licenses_licensee']
+    (item_id, grantee_tenant_id) [unique, name: 'uq_content_access_grants_item_tenant']
+    grantee_tenant_id [name: 'ix_content_access_grants_grantee']
+  }
+
+  checks {
+    `ends_at IS NULL OR ends_at > starts_at` [name: 'ck_content_access_grants_window']
+    `cardinality(allowed_actions) > 0` [name: 'ck_content_access_grants_actions']
   }
 
   Note: '''
-[P4] Cross-tenant sharing at EXAM granularity (not question level): licensee members can
-attempt the licensed exam's current revision; content stays owned and edited by the owner.
-Alternative coarse grant: tenant_entitlements.platform_library = all public platform exams.
+[P4] Explicit cross-tenant sharing of a root item (replaces exam_licenses): grantee members may
+consume or embed it ONLY according to allowed_actions; the owner keeps editing. Grant checks
+are required at reference creation, publish, and delivery; history remains reviewable under a
+separately defined post-expiry policy. Coarse alternative:
+tenant_entitlements.platform_library = all public platform content.
 '''
 }
 
-Table revision_audio_tracks {
-  id uuid [pk, default: `gen_random_uuid()`]
-  tenant_id uuid [not null]
-  exam_revision_id uuid [not null]
-  section_key text [not null, note: 'exam_revisions.sections[].key with delivery = audio_paced, e.g. "L" (TOEIC) or "P1".."P4" (IELTS Listening, one track per Part)']
-  asset_id uuid [not null, note: 'content_assets(kind = audio, purpose = question_media). Mastered, continuous section recording']
-  duration_ms integer [not null]
-  sample_rate_hz integer [not null, note: 'QC: 44100 or 48000']
-  channels smallint [not null, default: 1]
-  loudness_lufs numeric(5,2) [note: 'Integrated loudness (EBU R128). QC target −16 ±1 LUFS']
-  true_peak_dbtp numeric(5,2) [note: 'QC: ≤ −1.0 dBTP']
-  qc jsonb [not null, default: `'{}'::jsonb`, note: 'Measured QC report: {"silence_head_ms":800, "clipping_samples":0, "noise_floor_db":-62, "malware_scan":"clean", "warnings":[...]}']
-  cues jsonb [not null, default: `'[]'::jsonb`, note: 'PROTECTED. [{position:32, start_ms, end_ms, confidence:0.97, source:"aligned"|"manual"|"imported"}] — position = exam_revision_items.position. Drives audio-paced paging (mock) and per-question replay/transcript sync (practice/review)']
-  script_segments jsonb [not null, default: `'[]'::jsonb`, note: 'PROTECTED transcript: [{start_ms, end_ms, speaker:"M1"|"W1"|"N", accent:"us"|"uk"|"au"|"ca", text}] — English only; revealed only in review']
-  alignment_ai_run_id uuid [ref: > ai_runs.id, note: 'Last forced-alignment run (ai_purpose = audio_alignment)']
-  aligned_at timestamptz
-  created_by_user_id uuid [ref: > users.id]
+Table content_credits {
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  item_id uuid [not null, ref: > content_items.id]
+  user_id bigint [ref: > users.id, note: 'NULL for external people (e.g. a hired narrator)']
+  display_name text [note: 'Public name; required when user_id IS NULL']
+  role credit_role [not null]
+  position smallint [not null, default: 0]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (item_id, user_id, role) [unique, name: 'uq_content_credits_person_role', note: 'Partial: WHERE user_id IS NOT NULL']
+    user_id [name: 'ix_content_credits_user', note: 'Contributor profile: published work']
+  }
+
+  checks {
+    `user_id IS NOT NULL OR display_name IS NOT NULL` [name: 'ck_content_credits_identity']
+  }
+
+  Note: '''
+[P3] Public attribution on catalog cards, intro and results. Mandatory for provenance =
+community and for CC BY 4.0. Item-level credit roster is mutable; the publisher should
+snapshot attribution in the immutable manifest for historical presentation/licensing.
+'''
+}
+
+Table content_ratings {
+  item_id uuid [not null, ref: > content_items.id]
+  user_id bigint [not null]
+  tenant_id bigint [not null, note: 'Tenant context the learner rated in (membership)']
+  content_version_id uuid [not null, note: 'Version the learner actually took (same item, composite FK)']
+  rating smallint [not null]
+  issue_tags text[] [note: 'Optional low-rating reasons: wrong_key | unclear_audio | typo | too_easy | too_hard']
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (exam_revision_id, section_key) [unique, name: 'uq_revision_audio_tracks_section']
-    (tenant_id, id) [unique, name: 'uq_revision_audio_tracks_tenant_id']
-    asset_id [name: 'ix_revision_audio_tracks_asset']
+    (item_id, user_id) [pk]
   }
 
   checks {
-    `duration_ms > 0` [name: 'ck_revision_audio_tracks_duration']
-    `channels IN (1, 2)` [name: 'ck_revision_audio_tracks_channels']
+    `rating BETWEEN 1 AND 5` [name: 'ck_content_ratings_range']
   }
 
   Note: '''
-[P3] Section-level listening audio of an exam revision with its cue map and script. TOEIC mock
-plays one continuous recording per section; IELTS one per Part. Question-group audio
-(question_groups.audio_asset_id) remains the source for practice sets that pick a subset;
-the publish checklist requires every listening position in the section to have a cue.
-Copy-on-write with the revision: a new draft revision clones the row (same asset, editable
-cues/script); published rows are immutable. QC thresholds are publish gates (service), not
-CHECKs, because measured values must be stored even when they fail.
+[P3] One 1–5 rating per learner per root item (upsert) after a completed attempt (service rule).
+Aggregates come from content_ratings (optional Redis/materialized-view cache); shown when ≥ 10 ratings.
 '''
 }
 
-Table exam_credits {
-  id uuid [pk, default: `gen_random_uuid()`]
-  exam_id uuid [not null, ref: > exams.id]
-  user_id uuid [ref: > users.id, note: 'NULL for external people (e.g. a hired narrator)']
-  display_name text [note: 'Public name; required when user_id IS NULL. Users may hide their real name']
-  role credit_role [not null]
-  position smallint [not null, default: 0, note: 'Display order']
+Table content_reports {
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  tenant_id bigint [not null, ref: > tenants.id, note: 'Content-owner tenant (routes the Studio todo)']
+  reporter_user_id bigint [not null]
+  reporter_tenant_id bigint [not null, note: 'Tenant context of the reporter (platform content may be reported from an org)']
+  kind text [not null, note: 'question_error | copyright | inappropriate | other']
+  root_item_id uuid [not null, ref: > content_items.id, note: 'Catalog/assessment root that the learner encountered']
+  reported_version_id uuid [ref: > content_item_versions.id, note: 'Exact offending node version (can be a child question, not necessarily a version of root_item_id)']
+  attempt_id bigint [ref: > attempts.id, note: 'PROTECTED. Platform support only; owner tenant never sees learner answers']
+  issue_tags text[]
+  message text
+  status report_status [not null, default: 'open']
+  resolved_by_user_id bigint [ref: > users.id]
+  resolution_note text
   created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (exam_id, user_id, role) [unique, name: 'uq_exam_credits_person_role', note: 'Partial: WHERE user_id IS NOT NULL']
-    (user_id) [name: 'ix_exam_credits_user', note: 'Contributor profile: published sets']
+    (tenant_id, status, created_at) [name: 'ix_content_reports_queue']
+    (reporter_user_id, created_at) [name: 'ix_content_reports_reporter', note: 'Rate limiting']
+    root_item_id [name: 'ix_content_reports_root_item']
+    reported_version_id [name: 'ix_content_reports_version']
   }
 
   checks {
-    `user_id IS NOT NULL OR display_name IS NOT NULL` [name: 'ck_exam_credits_identity']
+    `kind IN ('question_error','copyright','inappropriate','other')` [name: 'ck_content_reports_kind']
+    `status = 'open' OR resolved_by_user_id IS NOT NULL` [name: 'ck_content_reports_resolution']
   }
 
-  Note: '''
-[P3] Public attribution shown on catalog cards, exam-intro and results ("Biên soạn: Minh N. ·
-Giọng đọc: …"). Mandatory for provenance = community (≥ 1 author) and for CC BY 4.0.
-Exam-level (not revision-level) because credits accumulate; reviewers listed only by opt-in.
-'''
+  Note: '[P3] Learner reports of content problems (copyright takedown, wrong key, unsafe). Registered users only. Validate that reported_version_id is present in the exact served root manifest; not the same logical item as root_item_id.'
 }
 
+
 // =============================================================================
-// 4b. CONTENT WORKFLOW (Content Studio import · submissions · moderation)
+// 7. CONTENT WORKFLOW (import · submissions · moderation · comments)
 // =============================================================================
 
-Table content_import_jobs {
-  id uuid [pk, default: `gen_random_uuid()`]
-  tenant_id uuid [not null, ref: > tenants.id]
-  created_by_user_id uuid [not null]
-  package_asset_id uuid [not null, note: 'content_assets(purpose = import_package), ZIP ≤ 2 GB']
+Table content_imports {
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  tenant_id bigint [not null, ref: > tenants.id]
+  created_by_user_id bigint [not null]
+  package_asset_id uuid [not null, note: 'media_assets(purpose = import_package), ZIP ≤ 2 GB']
+  report_asset_id uuid [note: 'media_assets(purpose = import_report), full CSV issues report']
   manifest_format text [not null, note: 'xlsx | csv | json']
   manifest_version text [not null, note: 'Template version, e.g. engrisk-import/1.2']
-  exam_type_id uuid [not null, ref: > exam_types.id]
+  exam_type_id bigint [not null, ref: > exam_types.id]
   status import_status [not null, default: 'uploaded']
   rights_basis rights_basis [not null]
   rights_confirmed_at timestamptz [not null]
   summary jsonb [not null, default: `'{}'::jsonb`, note: '{"rows_total":200, "rows_ok":193, "rows_error":7, "rows_warning":12, "assets_matched":54, "assets_missing":2, "assets_unused":1}']
-  errors jsonb [not null, default: `'[]'::jsonb`, note: 'First 500 issues: [{row, column, code:"E_KEY_MISSING", severity:"error"|"warning", message, hint}]. Full report downloadable as CSV']
-  exam_id uuid [note: 'Draft exam created (or updated: new draft revision) on completion']
-  exam_revision_id uuid
+  issues jsonb [not null, default: `'[]'::jsonb`, note: 'First 500: [{row, column, code, severity:"error"|"warning", message, hint}]; complete list in report_asset_id']
+  file_matches jsonb [not null, default: `'[]'::jsonb`, note: 'First 500: [{path, kind, matched_to, status: matched|missing|unused}]']
+  root_item_id uuid [note: 'Draft root created (or updated with a new draft version) on completion']
+  root_version_id uuid
   created_at timestamptz [not null, default: `now()`]
   started_at timestamptz
   finished_at timestamptz
 
   indexes {
-    (tenant_id, created_at) [name: 'ix_content_import_jobs_tenant']
-    (status, created_at) [name: 'ix_content_import_jobs_queue', note: 'Partial: WHERE status IN (uploaded, validating)']
+    (tenant_id, created_at) [name: 'ix_content_imports_tenant']
   }
 
   checks {
-    `rights_basis <> 'personal_study_only'` [name: 'ck_content_import_jobs_rights']
-    `status <> 'completed' OR exam_revision_id IS NOT NULL` [name: 'ck_content_import_jobs_result']
+    `rights_basis <> 'personal_study_only'` [name: 'ck_content_imports_rights']
+    `status <> 'completed' OR root_version_id IS NOT NULL` [name: 'ck_content_imports_result']
+    `(root_item_id IS NULL) = (root_version_id IS NULL)` [name: 'ck_content_imports_root_pair']
   }
 
   Note: '''
-[P3] Bulk import of a standard package (manifest + audio + images) into a DRAFT revision.
+[P3] Bulk import of a standard package into a DRAFT root version. Business record with legal
+rights confirmation; the async work runs as jobs (kind import_validation, target content_import).
 Lifecycle: uploaded → validating → validated | failed → completed. Validation never writes
-question rows; "Tạo bản nháp" does, in one transaction (origin = imported). Re-validating a
-package = new job. Package-level errors block; row errors are skipped (those positions stay
-missing in the draft and surface in the publish checklist); warnings never block.
-P4: available to teachers (content.import).
+content; "Tạo bản nháp" does, in one transaction (origin = imported).
 '''
 }
 
 Table content_submissions {
-  id uuid [pk, default: `gen_random_uuid()`]
-  tenant_id uuid [not null, note: 'Target (owning) tenant where the content will be published']
-  exam_id uuid [not null]
-  exam_revision_id uuid [not null, note: 'Draft revision frozen at submit (read-only while submitted/in_review)']
-  submitter_user_id uuid [not null]
-  status submission_status [not null, default: 'draft']
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  tenant_id bigint [not null, note: 'Target (owning) tenant where the content will be published']
+  item_id uuid [not null]
+  content_version_id uuid [not null, note: 'Version frozen at submit (status in_review while active)']
+  submitter_user_id bigint [not null]
+  status submission_status [not null, default: 'submitted']
   round smallint [not null, default: 1, note: '+1 on each resubmission after changes_requested']
   license contribution_license [note: 'Required for provenance = community; NULL for tenant-internal submissions']
   rights_basis rights_basis [not null, default: 'own_work']
-  rights_confirmed_at timestamptz [note: 'Contributor confirmed originality + licence at submit']
+  rights_confirmed_at timestamptz [not null, note: 'Contributor confirmed originality + licence at submit']
   message_to_reviewer text
-  auto_checks jsonb [not null, default: `'{}'::jsonb`, note: '{"schema":"pass", "keys_complete":"pass", "explanations":"warn", "audio_qc":"pass", "originality":{"status":"pass","max_similarity":0.12,"matches":[]}, "copyright_fingerprint":"pass", "language":"pass", "safety":"pass", "ai_run_id":".."}']
-  assigned_reviewer_user_id uuid [ref: > users.id]
+  auto_checks jsonb [not null, default: `'{}'::jsonb`, note: 'Snapshot of automated gate results: {"schema":"pass", "keys_complete":"pass", "audio_qc":"pass", "originality":{"status":"pass","max_similarity":0.12}, "safety":"pass"}']
+  assigned_reviewer_user_id bigint [ref: > users.id]
   sla_due_at timestamptz [note: 'submitted_at + 5 business days (community) / 2 (tenant)']
-  appeal_of_submission_id uuid [ref: > content_submissions.id, note: 'Appeal of a rejected submission (one appeal allowed)']
-  submitted_at timestamptz
+  appeal_of_submission_id bigint [ref: > content_submissions.id, note: 'Appeal of a rejected submission (one appeal allowed)']
+  submitted_at timestamptz [not null, default: `now()`]
   decided_at timestamptz
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
     (tenant_id, id) [unique, name: 'uq_content_submissions_tenant_id']
-    (exam_id) [name: 'ix_content_submissions_active', note: 'Implement as partial UNIQUE (exam_id) WHERE status IN (draft, submitted, in_review, changes_requested): one active submission per exam']
+    item_id [name: 'ix_content_submissions_active', note: 'Implement as partial UNIQUE (item_id) WHERE status IN (submitted, in_review, changes_requested): one active submission per item']
     (tenant_id, status, sla_due_at) [name: 'ix_content_submissions_queue', note: 'Moderation queue ordered by SLA']
     (submitter_user_id, status) [name: 'ix_content_submissions_submitter', note: '"Đóng góp của tôi"']
     (assigned_reviewer_user_id, status) [name: 'ix_content_submissions_reviewer']
   }
 
   checks {
-    `status = 'draft' OR (submitted_at IS NOT NULL AND rights_confirmed_at IS NOT NULL)` [name: 'ck_content_submissions_submitted']
     `status NOT IN ('approved','rejected') OR decided_at IS NOT NULL` [name: 'ck_content_submissions_decided']
     `assigned_reviewer_user_id IS NULL OR assigned_reviewer_user_id <> submitter_user_id` [name: 'ck_content_submissions_no_self_review']
     `rights_basis <> 'personal_study_only'` [name: 'ck_content_submissions_rights']
@@ -1140,107 +1191,102 @@ Table content_submissions {
   }
 
   Note: '''
-[P3] A request to publish one exam revision through review: community contributions
-(learner, submission.create) into the platform tenant, and P4 teacher drafts into their
-organization when the tenant requires review. Origin chip in the queue is derived from
-exams.provenance (community → Cộng đồng, tenant_authored → Giáo viên, engrisk_original → Nội bộ).
-Lifecycle: draft → submitted → in_review → approved | changes_requested | rejected; withdrawn
-from any non-terminal state. approve = revision published/scheduled + exams.visibility public
-(community) + exam_credits rows. Submitter must be a member of tenant_id (composite FK).
+[P3] Request to publish one version through review: community contributions into the platform
+tenant, and P4 teacher drafts when tenants.settings.content_policy.requires_review. Drafts are
+draft versions, not submissions. approve = version published/scheduled + item visibility public
+(community) + content_credits rows.
 '''
 }
 
-Table submission_reviews {
-  id uuid [pk, default: `gen_random_uuid()`]
-  submission_id uuid [not null, ref: > content_submissions.id]
-  reviewer_user_id uuid [not null, ref: > users.id]
-  round smallint [not null, note: 'content_submissions.round being decided']
-  decision review_decision [not null]
-  checklist jsonb [not null, default: `'{}'::jsonb`, note: '{"original":true, "keys_correct":true, "explanations":true, "audio_script":true, "level_tags_credits":true, "language_safety":true}']
-  reason_code text [note: 'Required for reject: copyright | format | quality | duplicate | unsafe. Optional for request_changes']
-  summary text [note: 'Message to the contributor (VI/EN), shown on contribute page']
+
+Table content_comments {
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  tenant_id bigint [not null]
+  content_version_id uuid [not null, note: 'Anchor: exact version (root, section, stimulus or question)']
+  submission_id bigint [note: 'Set for moderation threads']
+  submission_round smallint [note: 'content_submissions.round at creation; resubmit requires previous-round comments resolved']
+  parent_comment_id bigint [ref: > content_comments.id, note: 'Thread reply']
+  kind comment_kind [not null, default: 'comment']
+  author_user_id bigint [ref: > users.id, note: 'NULL for system/AI flags']
+  ai_run_id bigint [ref: > ai_runs.id, note: 'Quality-check run that raised a flag']
+  code text [note: 'Flag code, e.g. ambiguous_key, missing_alt, cue_gap']
+  decision review_decision [note: 'Required for kind=review_decision; moderator action']
+  decision_checklist jsonb [note: 'Versioned review checklist, required for decision event']
+  decision_reason_code text [note: 'Required for rejected/changes-requested decisions']
+  severity text [not null, default: 'info', note: 'info | warning | blocking (blocking flags fail the publish validator)']
+  anchor jsonb [not null, default: `'{}'::jsonb`, note: '{"field":"stem"|"options"|"answer_key"|"explanation"|"stimulus"|"image_alt"|"audio"|"transcript"|"metadata", "media_ms":1200, "option_key":"B"}']
+  body text [not null]
+  resolved_at timestamptz
+  resolved_by_user_id bigint [ref: > users.id]
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (submission_id, round) [unique, name: 'uq_submission_reviews_round', note: 'One decision per round']
-    (reviewer_user_id, created_at) [name: 'ix_submission_reviews_reviewer']
+    (content_version_id, resolved_at) [name: 'ix_content_comments_version_open']
+    (submission_id, submission_round, resolved_at) [name: 'ix_content_comments_submission_open', note: 'Partial: WHERE submission_id IS NOT NULL']
+    (submission_id, submission_round) [name: 'ix_content_comments_decision_round_lookup', note: 'Partial UNIQUE WHERE kind = review_decision: at most one decision per round']
   }
 
   checks {
-    `decision = 'approve' OR reason_code IS NOT NULL` [name: 'ck_submission_reviews_reason']
+    `kind = 'flag' OR author_user_id IS NOT NULL` [name: 'ck_content_comments_author']
+    `kind <> 'flag' OR code IS NOT NULL` [name: 'ck_content_comments_flag_code']
+    `(kind = 'review_decision') = (decision IS NOT NULL)` [name: 'ck_content_comments_decision_kind']
+    `kind <> 'review_decision' OR (submission_id IS NOT NULL AND parent_comment_id IS NULL AND author_user_id IS NOT NULL AND decision_checklist IS NOT NULL AND (decision = 'approve' OR decision_reason_code IS NOT NULL))` [name: 'ck_content_comments_decision_required']
+    `kind = 'review_decision' OR (decision_checklist IS NULL AND decision_reason_code IS NULL)` [name: 'ck_content_comments_decision_fields']
+    `(submission_id IS NULL) = (submission_round IS NULL)` [name: 'ck_content_comments_round']
+    `severity IN ('info','warning','blocking')` [name: 'ck_content_comments_severity']
   }
 
   Note: '''
-[P3] Immutable decision log (audit). Service rules: reviewer_user_id ≠ submission submitter
-(nobody approves their own work); approve requires every checklist item true and no blocking
-auto-check; reject with reason copyright also opens a takedown hold.
+[P1 flags / P3 moderation] One anchored feedback model for authoring (replaces
+questions.review_flags JSONB and review_comments): human comments in moderation and Studio,
+plus validator/AI quality flags as resolvable rows. A moderator's decision is an immutable
+kind=review_decision event (enforced by partial UNIQUE per submission/round), superseding
+moderation decision events. Do not mutate decision rows; application must atomically update submission
+status and write the event. Flags and decisions are never shown to learners unless authorized.
 '''
 }
 
-Table review_comments {
-  id uuid [pk, default: `gen_random_uuid()`]
-  submission_id uuid [not null]
-  author_user_id uuid [not null, ref: > users.id, note: 'Reviewer or contributor (replies)']
-  parent_comment_id uuid [ref: > review_comments.id, note: 'Thread reply']
-  question_id uuid [ref: > questions.id, note: 'Anchor: exact question version; NULL = whole submission']
-  field text [not null, default: 'general', note: 'stem | options | answer_key | explanation | stimulus | image_alt | audio | script | metadata | general']
-  audio_ms integer [note: 'Optional timestamp anchor when field = audio/script']
-  body text [not null]
-  resolved_at timestamptz
-  resolved_by_user_id uuid [ref: > users.id]
-  created_at timestamptz [not null, default: `now()`]
-
-  indexes {
-    (submission_id, resolved_at) [name: 'ix_review_comments_open', note: 'Unresolved count per submission']
-    question_id [name: 'ix_review_comments_question']
-  }
-
-  checks {
-    `field IN ('stem','options','answer_key','explanation','stimulus','image_alt','audio','script','metadata','general')` [name: 'ck_review_comments_field']
-  }
-
-  Note: '[P3] Reviewer comments anchored to a question/field, shown in moderation, contribute and the editor (contributor mode). Resubmission is blocked while comments from the last round are unresolved (service rule).'
-}
-
 // =============================================================================
-// 5. LEARNING RECORDS
+// 8. LEARNING RECORDS
 // =============================================================================
 
-Table learner_goals {
-  id uuid [pk, default: `gen_random_uuid()`]
-  tenant_id uuid [not null]
-  user_id uuid [not null]
-  exam_type_id uuid [not null, ref: > exam_types.id]
+Table learning_goals {
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  tenant_id bigint [not null]
+  user_id bigint [not null]
+  exam_type_id bigint [not null, ref: > exam_types.id]
   status goal_status [not null, default: 'active']
   self_assessed_level text [note: 'Onboarding answer: new | basic | intermediate | advanced']
-  baseline_score numeric(6,2) [note: 'Optional: previous score the learner reports (self-reported, not verified)']
-  target_score numeric(6,2) [note: 'TOEIC 10–990 or IELTS band; bounds from exam_types.score_scale']
+  baseline_score numeric(6,2) [note: 'Self-reported previous score (not verified)']
+  target_score numeric(6,2) [note: 'Bounds from exam_types.score_scale']
   target_date date
   weekly_study_minutes smallint
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (tenant_id, user_id, exam_type_id) [name: 'ix_learner_goals_user', note: 'Partial unique: WHERE status = active (one active goal per exam type)']
+    (tenant_id, user_id, exam_type_id) [name: 'ix_learning_goals_user', note: 'Partial unique: WHERE status = active (one active goal per exam type)']
   }
 
-  Note: '''
-[P1] Onboarding output and the basis for "recommended next" + goal progress. Skipping
-onboarding simply means no row; the dashboard then asks for a goal inline.
-'''
+  Note: '[P1] Onboarding output; basis for "recommended next" and goal progress. Registered users only (service rule).'
 }
 
 Table attempts {
-  id uuid [pk, default: `gen_random_uuid()`]
-  tenant_id uuid [not null, note: 'Tenant context the learner practised in']
-  user_id uuid [not null]
-  exam_revision_id uuid [ref: > exam_revisions.id, note: 'Pinned revision. NULL only for system-composed adaptive practice (P2)']
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  tenant_id bigint [not null, note: 'Tenant context the learner practised in']
+  user_id bigint [not null]
+  content_item_id uuid [ref: > content_items.id, note: 'Root item (exam, lesson quiz…). Denormalized for per-item filters/uniqueness; NULL only for system-composed adaptive practice']
+  content_version_id uuid [note: 'Pinned root version (same item, composite FK). NULL only for adaptive practice']
+  served_manifest_asset_id uuid [not null, ref: > media_assets.id, note: 'Immutable, learner-visible content manifest for this sitting; pin even for adaptive sessions with no root version']
   mode attempt_mode [not null]
   status attempt_status [not null, default: 'in_progress']
-  settings jsonb [not null, default: `'{}'::jsonb`, note: 'Chosen at setup, immutable after start. Practice: {"parts":["P5","P7"],"time_limit_seconds":900,"instant_check":true,"audio_replay":true,"transcript":true}. Mock: {} (rules come from the revision). Display prefs {"font":"lg","tone":"cream"} may change during the attempt']
-  resume_state jsonb [not null, default: `'{}'::jsonb`, note: '{"section_key":"R","page":7,"focus_position":104,"track":{"segment":3,"offset_ms":2000},"eliminated":{"<question_id>":["B"]},"split_pct":52}']
+  settings jsonb [not null, default: `'{}'::jsonb`, note: 'Chosen at setup, immutable after start. Practice: {"section_keys":["P5","P7"],"time_limit_seconds":900,"instant_check":true,"audio_replay":true,"transcript":true}. Display prefs {"font":"lg","tone":"cream"} may change']
+  resume_state jsonb [not null, default: `'{}'::jsonb`, note: 'UI state only; updated with optimistic locking (resume_revision), never authoritative for grading']
+  resume_revision bigint [not null, default: 0, note: 'Server CAS version for cross-device resume writes; clients must supply expected revision']
+  sections_state jsonb [not null, default: `'[]'::jsonb`, note: 'Server-owned windows: [{key:"L", opens_at, closes_at, closed_at, close_reason: time|learner|auto}]']
   started_at timestamptz [not null, default: `now()`]
   deadline_at timestamptz [note: 'Server-authoritative end for timed attempts']
+  paused_at timestamptz [note: 'Practice only; resume extends deadline_at by now() - paused_at']
   last_activity_at timestamptz [not null, default: `now()`]
   submitted_at timestamptz
   submit_reason submit_reason
@@ -1249,198 +1295,154 @@ Table attempts {
 
   indexes {
     (tenant_id, user_id, started_at) [name: 'ix_attempts_history']
-    (user_id, status) [name: 'ix_attempts_resume', note: 'Partial: WHERE status = in_progress']
-    (status, deadline_at) [name: 'ix_attempts_deadline_sweep', note: 'Partial: WHERE status = in_progress AND deadline_at IS NOT NULL — auto-submit job']
-    exam_revision_id [name: 'ix_attempts_revision']
+    (status, deadline_at) [name: 'ix_attempts_deadline_sweep', note: 'Partial: WHERE status = in_progress AND deadline_at IS NOT NULL']
+    content_version_id [name: 'ix_attempts_version']
   }
 
   checks {
-    `mode = 'practice' OR exam_revision_id IS NOT NULL` [name: 'ck_attempts_mock_has_revision']
-    `(status = 'in_progress') = (submitted_at IS NULL)` [name: 'ck_attempts_submitted_at']
+    `mode = 'practice' OR content_version_id IS NOT NULL` [name: 'ck_attempts_mock_has_version']
+    `(content_item_id IS NULL) = (content_version_id IS NULL)` [name: 'ck_attempts_root_pair']
+    `(status IN ('submitted','completed')) = (submitted_at IS NOT NULL)` [name: 'ck_attempts_submitted_at']
+    `paused_at IS NULL OR mode = 'practice'` [name: 'ck_attempts_pause_practice_only']
+    `resume_revision >= 0` [name: 'ck_attempts_resume_revision']
   }
 
   Note: '''
-[P1] One learner sitting = historical fact. Same engine for practice sets, section tests
-and full mocks (TOEIC and IELTS): exam differences live in revision sections/rules and
-the scoring policy, not in separate attempt systems. Guest attempts are ordinary attempts
-of a guest user. Exam-mode rules are enforced server-side (deadline, review lock, audio-paced
-Listening track, section order, IELTS check window). A practice attempt may serve a subset of
-the revision (settings.parts): attempt_responses then exist only for the served questions.
-"Redo mistakes" = new practice attempt on the same revision with the wrong questions only.
+[P1] One learner sitting = historical fact, pinned to an exact root version. Same engine for
+practice sets, section tests, full mocks (TOEIC/IELTS) and future lesson quizzes/adaptive
+sessions; differences live in version settings and the scoring policy. Composite FK
+(content_item_id, content_version_id) guarantees the pair is consistent.
+served_manifest_asset_id pins the fully resolved, sanitized delivery snapshot for static and
+adaptive practice; the snapshot must be available before the attempt starts.
+Guest attempts are ordinary attempts of a guest user. Exam rules are enforced server-side.
+Partial UNIQUE for active attempts is defined in companion SQL, not as a global DBML unique.
 '''
 }
 
 Table attempt_responses {
-  id uuid [pk, default: `gen_random_uuid()`]
-  attempt_id uuid [not null, ref: > attempts.id]
-  question_id uuid [not null, ref: > questions.id, note: 'Exact question version served']
-  section_key text [note: 'NULL for adaptive practice']
-  position integer [not null]
-  max_points numeric(5,2) [not null, note: 'Copied from exam_revision_items.points at start']
-  answer jsonb [note: 'NULL = unanswered. {"choice":"B"} | {"text":"..."} | {"pairs":{...}}']
-  answer_asset_id uuid [ref: > content_assets.id, note: 'Speaking recording']
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  attempt_id bigint [not null, ref: > attempts.id]
+  question_version_id uuid [not null, ref: > content_item_versions.id, note: 'Exact question version served']
+  served_key text [not null, note: 'Occurrence key from immutable served manifest, e.g. serialized relation path; distinguishes repeated placement of the SAME question version']
+  section_key text [note: 'Section settings.key it was served in; NULL for adaptive practice']
+  position integer [not null, note: 'Served question number (1-based) — historical record']
+  max_points numeric(7,2) [not null, note: 'Effective placement points copied at start']
+  answer jsonb [note: 'NULL = unanswered. Same shape as the API Answer: {"type":"single_choice","choice":"B"} | {"type":"matching","matches":{"14":"C"}} | {"type":"speaking","duration_ms":…}']
+  answer_asset_id uuid [ref: > media_assets.id, note: 'Recording (purpose response_media); single source of truth for speaking answers']
+  eliminated text[] [not null, default: `'{}'`, note: 'Option keys struck out by the learner']
   is_flagged boolean [not null, default: false, note: 'Mark for review']
+  row_revision bigint [not null, default: 0, note: 'Server-owned optimistic write revision; expected revision required on save, conflict = HTTP 409']
   first_answered_at timestamptz
   last_saved_at timestamptz
   time_spent_ms integer [not null, default: 0]
   is_correct boolean [note: 'Deterministic key grading; NULL for essay/speaking or ungraded']
-  points_awarded numeric(5,2) [note: 'Key-graded points, or the current evaluation result']
-  graded_at timestamptz
+  points_awarded numeric(7,2) [note: 'Key-graded points, or the current evaluation result']
+  graded_at timestamptz [note: 'Also the practice answer lock']
 
   indexes {
     (attempt_id, position) [unique, name: 'uq_attempt_responses_position']
-    (attempt_id, question_id) [unique, name: 'uq_attempt_responses_question']
-    question_id [name: 'ix_attempt_responses_question', note: 'Item analytics (p-value, distractors)']
+    (attempt_id, served_key) [unique, name: 'uq_attempt_responses_served_key']
+    question_version_id [name: 'ix_attempt_responses_question', note: 'Item analytics (p-value, distractors); group by item via versions']
+  }
+
+  checks {
+    `max_points >= 0` [name: 'ck_attempt_responses_points']
+    `row_revision >= 0` [name: 'ck_attempt_responses_revision']
   }
 
   Note: '''
-[P1] One row per SERVED question, created when the attempt starts (unanswered = answer
-NULL), so navigation, flags, resume and "unanswered" counts are trivial. Autosave =
-UPDATE answer/last_saved_at (last write wins per question). max_points/position are
-copied on purpose: the row is the historical record of what was served.
-Objective grading writes is_correct/points_awarded here; subjective feedback lives in evaluations.
+[P1] One row per SERVED question, created at attempt start (unanswered = answer NULL).
+Each row identifies the served OCCURRENCE, not only the question version.
+Autosave uses expected row_revision + atomic compare-and-swap and idempotency for retries.
+No silent last-write-wins across devices; return conflict and let client merge/retry.
+Objective grading writes is_correct/points_awarded; subjective feedback lives in evaluations.
 '''
 }
 
 Table attempt_annotations {
-  id uuid [pk, default: `gen_random_uuid()`]
-  attempt_id uuid [not null, ref: > attempts.id]
-  question_group_id uuid [ref: > question_groups.id, note: 'Stimulus the range belongs to (passage, document, transcript)']
-  stimulus_part smallint [not null, default: 0, note: 'Index of the document inside a multi-document group (TOEIC Part 7 double/triple passages)']
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  attempt_id bigint [not null, ref: > attempts.id]
+  content_version_id uuid [not null, ref: > content_item_versions.id, note: 'Exact stimulus version the range belongs to (passage, document, transcript)']
   kind annotation_kind [not null]
-  anchor jsonb [not null, note: '{"start":120,"end":168,"quote":"Rooftops in London…"} — character offsets in the rendered plain text of that stimulus version']
+  anchor jsonb [not null, note: '{"document_index":0,"start":120,"end":168,"quote":"Rooftops in London…"} — offsets in the rendered plain text of that version']
   body text [note: 'Note text; NULL for plain highlights']
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (attempt_id, question_group_id) [name: 'ix_attempt_annotations_attempt']
+    (attempt_id, content_version_id) [name: 'ix_attempt_annotations_attempt']
   }
 
-  Note: '''
-[P1] Highlights and notes made while taking a test, shown again in review. Anchored to the
-exact stimulus version served (question_groups are versioned), so offsets stay valid.
-Allowed in IELTS (as on the real computer-delivered test) and in practice mode; TOEIC mock
-disables them (no writing in the test book). Private to the learner.
-'''
+  Note: '[P1] Highlights and notes made while taking a test, shown again in review. Anchored to an immutable version so offsets stay valid. Private to the learner.'
 }
 
 Table evaluations {
-  id uuid [pk, default: `gen_random_uuid()`]
-  response_id uuid [not null, ref: > attempt_responses.id]
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  attempt_response_id bigint [not null, ref: > attempt_responses.id]
   evaluator_kind evaluator_kind [not null]
-  evaluator_user_id uuid [ref: > users.id, note: 'Teacher for human evaluations']
-  ai_run_id uuid [ref: > ai_runs.id]
+  evaluator_user_id bigint [ref: > users.id, note: 'Teacher for human evaluations']
+  job_id uuid [ref: > jobs.id, note: 'Async job producing an AI evaluation']
+  ai_run_id bigint [ref: > ai_runs.id, note: 'Run that produced the completed result']
   status evaluation_status [not null, default: 'pending']
-  rubric_key text [not null, note: 'Copied from question at evaluation time']
-  criteria_scores jsonb [note: '{"task_response":6.5,"coherence":6,"lexical":6.5,"grammar":6}']
-  estimated_score numeric(5,2) [note: 'AI/teacher band estimate for this response']
-  feedback jsonb [note: '{summary, strengths[], improvements[], inline:[{span, suggestion}]}']
+  rubric_key text [not null, note: 'Copied from content_answer_specs at evaluation time']
+  criteria_scores jsonb [note: 'Keys = API criterion vocabulary, e.g. {"task_response":6.5,"coherence_cohesion":6}']
+  estimated_score numeric(5,2) [note: 'AI/teacher band estimate']
+  feedback jsonb [note: '{summary, strengths[], improvements[], inline:[{start,end,suggestion,category}], estimated_range:{low,high}, low_confidence_criteria[], transcript?:{text,segments,confidence}}']
   created_at timestamptz [not null, default: `now()`]
   completed_at timestamptz
 
   indexes {
-    (response_id, created_at) [name: 'ix_evaluations_response', note: 'Partial unique (response_id) WHERE status = completed — one current evaluation']
+    (attempt_response_id, created_at) [name: 'ix_evaluations_response', note: 'Partial unique (attempt_response_id) WHERE status = completed — one current evaluation']
   }
 
   checks {
-    `(evaluator_kind = 'ai') = (ai_run_id IS NOT NULL)` [name: 'ck_evaluations_ai_run']
+    `evaluator_kind <> 'ai' OR ai_run_id IS NOT NULL OR (status IN ('pending','failed') AND job_id IS NOT NULL)` [name: 'ck_evaluations_ai_provenance']
     `evaluator_kind <> 'human' OR evaluator_user_id IS NOT NULL` [name: 'ck_evaluations_human_evaluator']
   }
 
-  Note: '''
-[P2] Subjective assessment of Writing/Speaking responses, kept apart from deterministic
-key grading. AI evaluations are always labeled "AI estimate"; a teacher evaluation (P4)
-supersedes the AI one (status superseded) without deleting it.
-'''
+  Note: '[P2] Subjective assessment of essay/speaking responses, separate from key grading. A teacher evaluation (P4) supersedes the AI one without deleting it; failed evaluations are kept.'
 }
 
 Table attempt_scores {
-  id uuid [pk, default: `gen_random_uuid()`]
-  attempt_id uuid [not null, ref: > attempts.id]
-  scope text [not null, note: '"overall" or a section_key ("L","R","W","S")']
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  attempt_id bigint [not null, ref: > attempts.id]
+  scope_key text [not null, note: 'Immutable served manifest key: overall or path-based section/content scope; not a mutable UI label']
   score_kind score_kind [not null]
-  value numeric(7,2) [not null]
-  max_value numeric(7,2) [not null]
+  score numeric(7,2) [not null]
+  max_score numeric(7,2) [not null]
   scale text [not null, note: 'points | toeic_section | toeic_total | ielts_band']
-  scoring_policy_key text [not null, note: 'Scorer version that produced this value']
+  scoring_policy_key text [not null, note: 'Scorer version that produced this score']
   computed_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (attempt_id, scope, score_kind) [unique, name: 'uq_attempt_scores_scope_kind']
-  }
-
-  Note: '''
-[P1] Score facts per attempt. Stored (not derived on read) because conversion tables and
-AI models change; history must show what the learner saw. Percent = value/max_value
-(derived, not stored). There is no "official" score_kind: Engrisk never issues official
-scores. Per-skill breakdown is derived from responses + question_skills.
-'''
-}
-
-Table learner_skill_stats {
-  tenant_id uuid [not null]
-  user_id uuid [not null]
-  skill_id uuid [not null, ref: > skills.id]
-  responses_count integer [not null, default: 0]
-  correct_count integer [not null, default: 0]
-  mastery numeric(4,3) [note: '0..1 recency-weighted estimate']
-  last_practiced_at timestamptz
-  updated_at timestamptz [not null, default: `now()`]
-
-  indexes {
-    (tenant_id, user_id, skill_id) [pk]
-  }
-
-  Note: '''
-[P1] Derived read model for dashboard "weak skills" and recommendations; updated when an
-attempt is graded and fully rebuildable from attempt_responses + question_skills.
-Exists only for read performance — not a source of truth.
-'''
-}
-
-Table exam_ratings {
-  exam_id uuid [not null, ref: > exams.id]
-  user_id uuid [not null]
-  tenant_id uuid [not null, note: 'Tenant context the learner rated in (membership)']
-  exam_revision_id uuid [not null, ref: > exam_revisions.id, note: 'Revision the learner actually took']
-  rating smallint [not null]
-  issue_tags text[] [note: 'Optional low-rating reasons: wrong_key | unclear_audio | typo | too_easy | too_hard']
-  created_at timestamptz [not null, default: `now()`]
-  updated_at timestamptz [not null, default: `now()`]
-
-  indexes {
-    (exam_id, user_id) [pk]
-    (exam_id, rating) [name: 'ix_exam_ratings_exam', note: 'Aggregate for catalog ★ + Studio/contributor stats']
+    (attempt_id, scope_key, score_kind) [unique, name: 'uq_attempt_scores_scope_kind']
   }
 
   checks {
-    `rating BETWEEN 1 AND 5` [name: 'ck_exam_ratings_range']
+    `max_score > 0 AND score >= 0` [name: 'ck_attempt_scores_range']
   }
 
-  Note: '''
-[P3] One 1–5 star rating per learner per exam (upsert), offered on results after a completed
-attempt (service rule: requires attempts.status = completed for that exam). Shown in the
-catalog only when ≥ 10 ratings. Ratings ≤ 2 with issue_tags feed a Studio quality todo.
-'''
+  Note: '[P1] Score facts per attempt, stored because conversion tables and AI models change. Validate scope_key against immutable served manifest. Per-skill breakdown is derived from responses + content_version_skills.'
 }
 
+
 // =============================================================================
-// 6. AI PROVENANCE & TUTOR
+// 9. AI
 // =============================================================================
 
 Table ai_runs {
-  id uuid [pk, default: `gen_random_uuid()`]
-  tenant_id uuid [not null, ref: > tenants.id]
-  requested_by_user_id uuid [ref: > users.id]
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  tenant_id bigint [not null, ref: > tenants.id]
+  job_id uuid [ref: > jobs.id, note: 'Public job this invocation belongs to (retries = more runs)']
+  requested_by_user_id bigint [ref: > users.id]
   purpose ai_purpose [not null]
-  status ai_run_status [not null, default: 'queued']
+  status execution_status [not null, default: 'queued']
   provider text [not null, note: 'openai | anthropic | google | self_hosted']
   model text [not null]
   model_version text
   prompt_key text [not null, note: 'Prompt template id in code']
   prompt_version text [not null]
-  input_refs jsonb [not null, default: `'{}'::jsonb`, note: 'Ids only: {"response_id":..} {"source_material_id":..}']
+  input_refs jsonb [not null, default: `'{}'::jsonb`, note: 'Ids only, for audit: {"attempt_response_id":..} {"source_material_id":..}']
   usage jsonb [not null, default: `'{}'::jsonb`, note: '{input_tokens, output_tokens, cost_usd, latency_ms}']
   error_code text
   created_at timestamptz [not null, default: `now()`]
@@ -1450,112 +1452,182 @@ Table ai_runs {
   indexes {
     (tenant_id, purpose, created_at) [name: 'ix_ai_runs_tenant_purpose']
     (requested_by_user_id, created_at) [name: 'ix_ai_runs_user', note: 'Per-user quota checks']
-    (status, created_at) [name: 'ix_ai_runs_queue', note: 'Partial: WHERE status IN (queued, running)']
+    job_id [name: 'ix_ai_runs_job']
   }
 
   Note: '''
-[P1] One row per AI invocation = provenance + async job state + cost/quota ledger.
-Outputs are stored in the domain row that uses them (questions, evaluations,
-tutor_messages), which points back here. Raw prompts/completions are NOT stored in
-PostgreSQL (privacy); short-retention logs only. No separate generation-job table.
+[P1] Internal provider-call ledger = provenance + cost/quota. Outputs live in the domain rows
+that point back here (content versions, evaluations, messages, timelines, comments). Raw
+prompts/completions are NOT stored (privacy). Queueing and the public lifecycle are in jobs.
 '''
 }
 
-Table tutor_conversations {
-  id uuid [pk, default: `gen_random_uuid()`]
-  tenant_id uuid [not null]
-  user_id uuid [not null]
-  attempt_id uuid [ref: > attempts.id, note: 'Context: opened from a result']
-  response_id uuid [ref: > attempt_responses.id, note: 'Context: "Explain this answer"']
-  question_id uuid [ref: > questions.id, note: 'Context when opened outside an attempt']
+Table conversations {
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  tenant_id bigint [not null]
+  user_id bigint [not null]
+  kind text [not null, default: 'tutor', note: 'Registry: tutor; later speaking_partner, study_coach']
+  attempt_id bigint [ref: > attempts.id, note: 'Context: opened from a result']
+  attempt_response_id bigint [ref: > attempt_responses.id, note: 'Context: "Explain this answer"']
+  content_version_id uuid [ref: > content_item_versions.id, note: 'Context outside an attempt (disclosed questions or authoring staff only)']
   title text
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
   archived_at timestamptz
 
   indexes {
-    (tenant_id, user_id, updated_at) [name: 'ix_tutor_conversations_user']
-    response_id [name: 'ix_tutor_conversations_response']
+    (tenant_id, user_id, updated_at) [name: 'ix_conversations_user']
+    attempt_response_id [name: 'ix_conversations_response']
   }
 
-  Note: '''
-[P1] AI tutor thread, usually anchored to a response so the tutor is grounded on the
-verified answer key + explanation. Private to the learner (tenant admins see usage counts,
-not content — open question in product_flow.md M).
-'''
+  Note: '[P1] AI assistant thread (tutor today), grounded on the verified answer key + explanation of its context. Private to the learner.'
 }
 
-Table tutor_messages {
-  id uuid [pk, default: `gen_random_uuid()`]
-  conversation_id uuid [not null]
-  sender message_sender [not null]
+Table conversation_messages {
+  id bigint [pk, increment, note: 'DB-assigned monotonic BIGINT identity; use GENERATED BY DEFAULT AS IDENTITY in PostgreSQL migrations']
+  conversation_id bigint [not null]
+  role message_role [not null]
   body text [not null]
-  ai_run_id uuid [ref: > ai_runs.id, note: 'Set for tutor messages']
-  grounding jsonb [not null, default: `'[]'::jsonb`, note: 'Cited sources: [{"type":"answer_key","question_id":..},{"type":"explanation"}]']
-  learner_rating smallint [note: '-1 not helpful, 1 helpful']
+  ai_run_id bigint [ref: > ai_runs.id, note: 'Set for assistant messages']
+  grounding jsonb [not null, default: `'[]'::jsonb`, note: 'Cited sources: [{"type":"answer_key","question_version_id":..},{"type":"explanation"}]']
+  rating smallint [note: 'Learner feedback: -1 not helpful, 1 helpful']
   created_at timestamptz [not null, default: `now()`]
 
   indexes {
-    (conversation_id, created_at) [name: 'ix_tutor_messages_conversation']
+    (conversation_id, created_at) [name: 'ix_conversation_messages_conversation']
   }
 
   checks {
-    `sender <> 'tutor' OR ai_run_id IS NOT NULL` [name: 'ck_tutor_messages_ai_provenance']
+    `role <> 'assistant' OR ai_run_id IS NOT NULL` [name: 'ck_conversation_messages_ai_provenance']
+    `rating IS NULL OR rating IN (-1, 1)` [name: 'ck_conversation_messages_rating']
   }
 
-  Note: '[P1] Messages in a tutor thread. Tutor messages always carry provenance; grounding lets the UI separate "Verified answer key" from "AI explanation".'
+  Note: '[P1] Messages in a conversation. Assistant messages always carry provenance; grounding separates "verified answer key" from "AI explanation".'
 }
 
 // =============================================================================
-// TENANT-CONSISTENCY & SCOPE COMPOSITE FOREIGN KEYS
+// 10. PLATFORM KERNEL
+// =============================================================================
+
+Table jobs {
+  id uuid [pk, default: `gen_random_uuid()`]
+  tenant_id bigint [not null, ref: > tenants.id]
+  requested_by_user_id bigint [ref: > users.id, note: 'NULL for system jobs (sweeper, scheduler)']
+  kind text [not null, note: 'Registry (API Job.type): question_generation, speech_synthesis, audio_alignment, media_processing, content_assist, quality_check, writing_evaluation, speaking_evaluation, tutor_reply, originality_check, import_validation, material_extraction, manifest_compilation, account_deletion']
+  status execution_status [not null, default: 'queued']
+  target_type text [note: 'Registry: attempt_response | content_version | content_import | content_submission | media_asset | conversation | user']
+  target_key text [note: 'Canonical textual identifier of target_type: decimal BIGINT or lowercase UUID. No FK (heterogeneous target kinds); validated by job handler.']
+  input jsonb [not null, default: `'{}'::jsonb`, note: 'Typed per kind; ids and options only, no secrets']
+  result jsonb [note: 'Typed per kind; references only']
+  progress jsonb [not null, default: `'{}'::jsonb`, note: '{percent, stage}']
+  error jsonb [note: '{code, retryable}']
+  run_count smallint [not null, default: 0, note: 'Worker executions so far']
+  run_after timestamptz [not null, default: `now()`]
+  lease_expires_at timestamptz [note: 'Worker lease expiry for reclaiming stalled running jobs; heartbeat extends lease']
+  cancel_requested_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+  started_at timestamptz
+  finished_at timestamptz
+
+  indexes {
+    (status, run_after) [name: 'ix_jobs_queue', note: 'Partial: WHERE status = queued; use FOR UPDATE SKIP LOCKED when claiming']
+    (status, lease_expires_at) [name: 'ix_jobs_stalled', note: 'Partial: WHERE status = running; reclaim only when lease expired']
+    (tenant_id, requested_by_user_id, created_at) [name: 'ix_jobs_requester', note: 'Job list + quota counting']
+    (target_type, target_key) [name: 'ix_jobs_target']
+  }
+
+  checks {
+    `(target_type IS NULL) = (target_key IS NULL)` [name: 'ck_jobs_target_pair']
+    `run_count >= 0` [name: 'ck_jobs_run_count']
+  }
+
+  Note: '''
+[P1] Public async handle with one lifecycle for AI and non-AI work.
+Polymorphic (target_type, target_key) is intentionally TEXT + type; never assume all target IDs are UUID. Validate target reference in each handler. Claim queued work by
+transactional FOR UPDATE SKIP LOCKED, commit status=running + lease_expires_at, heartbeat
+or reclaim expired leases, and use idempotent handlers to tolerate at-least-once execution.
+Jobs never mutate published content; outputs land in drafts or permitted domain facts.
+Provider calls are recorded per invocation in ai_runs.job_id.
+'''
+}
+
+Table idempotency_keys {
+  principal text [not null, note: 'user:<8-digit id> or anon:<sha256(client fingerprint)> for unauthenticated guest creation']
+  key uuid [not null]
+  method text [not null]
+  path text [not null, note: 'Route template + ids, e.g. /attempts/{id}/submit']
+  request_sha256 bytea [not null, note: 'Hash of method + path + canonical body']
+  response_status smallint
+  response_body jsonb [note: 'Never secrets: token-issuing endpoints store ids only and re-mint on replay']
+  locked_until timestamptz [note: 'Set while the first request is in flight']
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (principal, key) [pk]
+    created_at [name: 'ix_idempotency_keys_expiry', note: 'Purge rows older than 24 h']
+  }
+
+  Note: '[P1] Idempotency-Key replay store (24 h). UNLOGGED acceptable: loss degrades to domain-rule duplicate detection.'
+}
+
+// =============================================================================
+// TENANT-CONSISTENCY, SCOPE & SAME-ITEM COMPOSITE FOREIGN KEYS
 // =============================================================================
 
 // Role scope guards
-Ref: platform_role_assignments.(role_id, role_scope) > roles.(id, scope)
-Ref: membership_roles.(role_id, role_scope) > roles.(id, scope)
+Ref: role_assignments.(role_id, role_scope) > roles.(id, scope)
+Ref: action_tokens.(role_id, role_scope) > roles.(id, scope)
+Ref: role_permissions.(role_id, role_scope) > roles.(id, scope)
+Ref: role_permissions.(permission_id, role_scope) > permissions.(id, scope)
 
 // Session tenant context must be a membership of the session user
 Ref: auth_sessions.(active_tenant_id, user_id) > tenant_memberships.(tenant_id, user_id)
 
+// Tenant logo belongs to the tenant
+Ref: tenants.(id, logo_asset_id) > media_assets.(tenant_id, id)
+
 // Learner data lives inside a membership
 Ref: source_materials.(tenant_id, owner_user_id) > tenant_memberships.(tenant_id, user_id)
-Ref: learner_goals.(tenant_id, user_id) > tenant_memberships.(tenant_id, user_id)
+Ref: learning_goals.(tenant_id, user_id) > tenant_memberships.(tenant_id, user_id)
 Ref: attempts.(tenant_id, user_id) > tenant_memberships.(tenant_id, user_id)
-Ref: learner_skill_stats.(tenant_id, user_id) > tenant_memberships.(tenant_id, user_id)
-Ref: tutor_conversations.(tenant_id, user_id) > tenant_memberships.(tenant_id, user_id)
-Ref: exam_ratings.(tenant_id, user_id) > tenant_memberships.(tenant_id, user_id)
+Ref: conversations.(tenant_id, user_id) > tenant_memberships.(tenant_id, user_id)
+Ref: content_ratings.(tenant_id, user_id) > tenant_memberships.(tenant_id, user_id)
+Ref: content_reports.(reporter_tenant_id, reporter_user_id) > tenant_memberships.(tenant_id, user_id)
 
-// Private content owners must be members of the owning tenant
-Ref: question_groups.(tenant_id, owner_user_id) > tenant_memberships.(tenant_id, user_id)
-Ref: questions.(tenant_id, owner_user_id) > tenant_memberships.(tenant_id, user_id)
-Ref: exams.(tenant_id, owner_user_id) > tenant_memberships.(tenant_id, user_id)
-
-// Content workflow actors must be members of the tenant they act in
-Ref: content_import_jobs.(tenant_id, created_by_user_id) > tenant_memberships.(tenant_id, user_id)
+// Private content owners and workflow actors are members of the tenant they act in
+Ref: content_items.(tenant_id, owner_user_id) > tenant_memberships.(tenant_id, user_id)
+Ref: content_imports.(tenant_id, created_by_user_id) > tenant_memberships.(tenant_id, user_id)
 Ref: content_submissions.(tenant_id, submitter_user_id) > tenant_memberships.(tenant_id, user_id)
 
-// Authoring graph stays inside one tenant
-Ref: source_materials.(tenant_id, asset_id) > content_assets.(tenant_id, id)
-Ref: question_groups.(tenant_id, audio_asset_id) > content_assets.(tenant_id, id)
-Ref: question_groups.(tenant_id, image_asset_id) > content_assets.(tenant_id, id)
-Ref: question_groups.(tenant_id, source_material_id) > source_materials.(tenant_id, id)
-Ref: questions.(tenant_id, question_group_id) > question_groups.(tenant_id, id)
-Ref: questions.(tenant_id, source_material_id) > source_materials.(tenant_id, id)
-Ref: exam_revisions.(tenant_id, exam_id) > exams.(tenant_id, id)
-Ref: exam_revision_items.(tenant_id, exam_revision_id) > exam_revisions.(tenant_id, id) [delete: cascade]
-Ref: exam_revision_items.(tenant_id, question_id) > questions.(tenant_id, id)
-Ref: exams.(tenant_id, cover_asset_id) > content_assets.(tenant_id, id)
-Ref: revision_audio_tracks.(tenant_id, exam_revision_id) > exam_revisions.(tenant_id, id) [delete: cascade]
-Ref: revision_audio_tracks.(tenant_id, asset_id) > content_assets.(tenant_id, id)
-Ref: content_import_jobs.(tenant_id, package_asset_id) > content_assets.(tenant_id, id)
-Ref: content_import_jobs.(tenant_id, exam_id) > exams.(tenant_id, id)
-Ref: content_import_jobs.(tenant_id, exam_revision_id) > exam_revisions.(tenant_id, id)
-Ref: content_submissions.(tenant_id, exam_id) > exams.(tenant_id, id)
-Ref: content_submissions.(tenant_id, exam_revision_id) > exam_revisions.(tenant_id, id)
+// Content graph: versions belong to their item; published pointer stays on the same item
+Ref: content_item_versions.(tenant_id, item_id) > content_items.(tenant_id, id)
+Ref: content_items.(id, current_published_version_id) > content_item_versions.(item_id, id)
+Ref: content_item_versions.(item_id, based_on_version_id) > content_item_versions.(item_id, id)
+Ref: content_item_relations.(tenant_id, parent_version_id) > content_item_versions.(tenant_id, id) [delete: cascade]
+Ref: content_item_relations.(child_item_id, child_version_id) > content_item_versions.(item_id, id)
+Ref: content_version_assets.(tenant_id, content_version_id) > content_item_versions.(tenant_id, id) [delete: cascade]
+Ref: content_version_assets.(tenant_id, asset_id) > media_assets.(tenant_id, id)
+Ref: content_media_timelines.content_version_asset_id - content_version_assets.id [delete: cascade]
+Ref: content_item_versions.(tenant_id, source_material_id) > source_materials.(tenant_id, id)
+Ref: source_materials.(tenant_id, asset_id) > media_assets.(tenant_id, id)
+
+// Learner records pin a consistent (item, version) pair; ratings rate a version of the item
+Ref: attempts.(content_item_id, content_version_id) > content_item_versions.(item_id, id)
+Ref: content_ratings.(item_id, content_version_id) > content_item_versions.(item_id, id)
+
+// Workflow stays inside the owning tenant
+Ref: content_imports.(tenant_id, package_asset_id) > media_assets.(tenant_id, id)
+Ref: content_imports.(tenant_id, report_asset_id) > media_assets.(tenant_id, id)
+Ref: content_imports.(tenant_id, root_item_id) > content_items.(tenant_id, id)
+Ref: content_imports.(tenant_id, root_version_id) > content_item_versions.(tenant_id, id)
+Ref: content_imports.(root_item_id, root_version_id) > content_item_versions.(item_id, id)
+Ref: content_submissions.(tenant_id, item_id) > content_items.(tenant_id, id)
+Ref: content_submissions.(item_id, content_version_id) > content_item_versions.(item_id, id)
+Ref: content_comments.(tenant_id, content_version_id) > content_item_versions.(tenant_id, id) [delete: cascade]
+Ref: content_comments.(tenant_id, submission_id) > content_submissions.(tenant_id, id) [delete: cascade]
 
 // Compositions (child rows have no meaning without parent)
-Ref: tutor_messages.conversation_id > tutor_conversations.id [delete: cascade]
-Ref: review_comments.submission_id > content_submissions.id [delete: cascade]
+Ref: conversation_messages.conversation_id > conversations.id [delete: cascade]
 
 // =============================================================================
 // TABLE GROUPS
@@ -1565,67 +1637,78 @@ TableGroup identity_access [color: #3B82F6] {
   users
   auth_identities
   auth_sessions
-  auth_tokens
+  action_tokens
   roles
   permissions
   role_permissions
-  platform_role_assignments
-  Note: 'Global identity (who you are) separated from authorization (what you may do where).'
+  role_assignments
+  Note: 'Global identity plus typed single-use tokens and unified role assignments.'
 }
 
 TableGroup tenancy [color: #8B5CF6] {
   tenants
   tenant_memberships
-  membership_roles
   tenant_entitlements
-  tenant_invitations
-  Note: 'Organization boundary, membership, tenant-scoped roles, feature switches.'
+  Note: 'Organization boundary, membership, and feature entitlements. Role grants live in identity_access.'
 }
 
-TableGroup assets_uploads [color: #64748B] {
-  content_assets
+TableGroup media [color: #64748B] {
+  media_assets
   source_materials
-  Note: 'Files in object storage and learner-uploaded study material.'
+  Note: 'Files in object storage (R2 / MinIO) and learner-uploaded study material.'
 }
 
-TableGroup exam_content [color: #10B981] {
+TableGroup reference [color: #94A3B8] {
   exam_types
   skills
-  question_groups
-  questions
-  question_skills
-  exams
-  exam_revisions
-  exam_revision_items
-  exam_licenses
-  revision_audio_tracks
-  exam_credits
-  Note: 'One question bank for all formats and origins; exams publish immutable revisions with section audio, cues, scripts and credits.'
+  Note: 'Global, code-seeded reference data: test formats and the skill taxonomy.'
+}
+
+TableGroup content_graph [color: #10B981] {
+  content_items
+  content_item_versions
+  content_item_relations
+  content_version_assets
+  content_media_timelines
+  content_answer_specs
+  content_version_skills
+  Note: 'Logical identity, immutable versions, reusable placements, protected answers/media; manifests compiled to media_assets.'
+}
+
+TableGroup content_ecosystem [color: #14B8A6] {
+  content_access_grants
+  content_credits
+  content_ratings
+  content_reports
+  Note: 'Item-level sharing, attribution, ratings and protected problem reports; counters derived from facts.'
 }
 
 TableGroup content_workflow [color: #0EA5E9] {
-  content_import_jobs
+  content_imports
   content_submissions
-  submission_reviews
-  review_comments
-  Note: 'Content Studio import, community/teacher submissions and moderation decisions (P3/P4).'
+  content_comments
+  Note: 'Imports, submissions and one append-only feedback/decision/event model.'
 }
 
-TableGroup learning_records [color: #F59E0B] {
-  learner_goals
+TableGroup learning [color: #F59E0B] {
+  learning_goals
   attempts
   attempt_responses
   attempt_annotations
   evaluations
   attempt_scores
-  learner_skill_stats
-  exam_ratings
-  Note: 'Historical facts of learning; pinned to exact content versions. Includes learner ratings of exams.'
+  Note: 'Historical facts of learning, pinned to exact content versions.'
 }
 
 TableGroup ai [color: #EC4899] {
   ai_runs
-  tutor_conversations
-  tutor_messages
-  Note: 'AI provenance and tutor conversations. Outputs live in domain tables.'
+  conversations
+  conversation_messages
+  Note: 'AI provenance ledger and assistant conversations. Outputs live in domain tables.'
+}
+
+TableGroup platform [color: #475569] {
+  jobs
+  idempotency_keys
+  Note: 'Cross-cutting kernel: async jobs and request idempotency.'
 }
