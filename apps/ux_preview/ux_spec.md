@@ -194,10 +194,12 @@ stateDiagram-v2
 - **Trạng thái:** loading = skeleton đúng hình khối (không spinner toàn trang); error = Alert + vẫn giữ “Luyện nhanh”; empty (người mới) = 1 card gợi ý lớn + 2 card trống có hành động.
 - **Scale:** Home là **feed khối có thứ tự ưu tiên** — tính năng mới (bài được giao P4, thử thách tuần, lớp học) thêm khối mới với hạng ưu tiên, không đổi layout. Tối đa 2 khối có primary CTA.
 
-### F5. Danh mục bài (Catalog) · P1
+### F5. Luyện đề (Catalog) & Thiết lập · P1
 
-- **Thứ tự lọc = thứ tự quyết định của người học:** Kỳ thi → Loại bài → Kỹ năng → Tìm kiếm.
-- **Behavior:** lọc tức thì (không nút Áp dụng); toggle kỹ năng bấm lại để bỏ; kết quả rỗng → empty state giải thích *vì sao* (ví dụ TOEIC L&R không có Writing) + “Xóa bộ lọc”. Bài ngắn bấm “Bắt đầu” vào thẳng `exam`; thi thử bấm “Xem đề” vào `exam-intro`.
+> Đặc tả đầy đủ: `exam_practice_spec.md` §3–§4.
+
+- **Thứ tự quyết định của người học:** Kỳ thi → Loại (Đề đầy đủ / Theo Part hoặc Dạng câu / Bài ngắn) → Tìm kiếm. Thẻ Part hiển thị độ chính xác của chính người học để chọn chỗ yếu.
+- **Behavior:** bài ngắn bấm “Bắt đầu” vào thẳng `exam`; đề đầy đủ và tile Part/dạng câu mở `exam-intro` (Thiết lập): chọn Thi thử hoặc Luyện tập (Part, giới hạn thời gian, kiểm tra từng trang, nghe lại & tốc độ, transcript), kiểm tra âm thanh, lịch sử đề. Tìm kiếm rỗng → empty state + “Xóa tìm kiếm”.
 - **Khóa nội dung:** 3 mức hiển thị — *Cần tài khoản* (chip lock + CTA dẫn đăng ký), *Premium · tương lai* (chip warning, CTA disabled), *Sắp ra mắt* (chip tertiary, card mờ 72%). Không ẩn bài bị khóa (người học biết giá trị còn ở phía trước).
 - **Scale:** bộ lọc sinh từ dữ liệu (`exam_types`, `skills.area`, `exams.kind`); > 5 kỹ năng → `ToggleButtonGroup` cuộn ngang; > 30 bài → nhóm theo section (“Thi thử”, “Part 5”…) + phân trang vô hạn; tenant P4 thêm tab nguồn “Của trung tâm / Thư viện Engrisk”.
 
@@ -222,20 +224,21 @@ stateDiagram-v2
 
 | Hành vi | Practice | Mock |
 |---|---|---|
-| Timer | Đếm lên, tạm dừng khi thoát | Đếm ngược theo server; vàng ≤5 phút, đỏ ≤1 phút; tự nộp khi 0 |
-| Phản hồi | “Kiểm tra” từng câu, khóa câu đã kiểm tra | Ẩn đến khi nộp |
-| Audio | Phát/nghe lại, transcript sau kiểm tra | Phát 1 lần, nút disabled sau khi phát |
-| TOEIC Part 2 | Hiện text phương án sau kiểm tra | Chỉ (A)(B)(C) |
-| Navigator | Màu đúng/sai + ký hiệu ✓/✕ | Đã trả lời / chưa / đánh dấu |
+| Timer | Đếm lên hoặc đếm ngược theo giới hạn đã chọn; **Tạm dừng** được | Theo server từng phần; TOEIC Listening theo audio rồi Reading 75′; IELTS “phút còn lại”, cảnh báo 10′/5′; tự nộp khi hết |
+| Phản hồi | “Kiểm tra” theo trang, khóa câu đã kiểm tra | Ẩn đến khi nộp |
+| Audio | Play/pause, −5s, 0.75–1.25×, transcript đồng bộ sau kiểm tra | Một bản ghi liên tục, tự phát, chỉ chỉnh âm lượng; tự chuyển trang theo audio |
+| TOEIC Part 1–2 | Phương án chỉ nghe, chữ hiện sau kiểm tra | Chỉ (A)(B)(C)(D) |
+| Điều hướng | TOEIC: phiếu trả lời (bubble, xanh/đỏ sau kiểm tra). IELTS: thanh Part + số câu ở đáy | Như practice, không màu đúng/sai; section đã đóng bị khóa |
+| Công cụ | Highlight, ghi chú, loại trừ phương án, cỡ chữ, màu nền | IELTS: highlight, ghi chú, Review, Ẩn màn hình. TOEIC: chỉ đánh dấu |
 
-- **Bàn phím (Web):** A–D chọn, ←/→ chuyển câu, F đánh dấu; không bắt phím khi focus ở ô nhập; sau khi chọn bằng phím, focus không nhảy vào radio (để ←/→ vẫn chuyển câu).
-- **Touch (Mobile):** cả thẻ đáp án là vùng chạm ≥56px; lưới câu trong BottomSheet; nút “n/N” ở giữa thanh dưới mở lưới.
-- **Scale:** renderer theo `question_type` (single/multiple choice, fill blank, matching, ordering, short answer, essay, speaking) — mỗi loại là 1 component `QuestionBody` cắm vào cùng khung `qwrap`; định dạng đề mới (Cambridge, TOEIC S&W) chỉ thêm section rules + renderer, giữ nguyên header/nav/footer.
+- **Bàn phím (Web):** A–D (TFNG: T/F/N) chọn, ←/→ trang (TOEIC) hoặc câu (IELTS), F đánh dấu, Space phát/dừng (practice); không bắt phím khi focus ở ô nhập.
+- **Touch (Mobile):** phương án ≥44px, phiếu trả lời trong BottomSheet (bubble 34px), Tabs “Văn bản / Câu hỏi” cho đoạn văn.
+- **Scale:** renderer theo dạng câu (`single`, `gap`, `multi`, `heading`, `select`, map grid…) cắm vào cùng khung; layout `toeic` / `ielts` chọn theo `exam_revisions.sections`; định dạng mới (TOEIC S&W, Cambridge) = thêm rules + renderer. Chi tiết: `exam_practice_spec.md` §5–§9.
 
 ### F7. Kết quả & xem lại · P1
 
-- **Thứ tự:** Summary (loại điểm luôn có nhãn) → Bước tiếp theo (primary) → Điểm theo phần → Theo kỹ năng → Danh sách đáp án (lọc Sai/Bỏ trống/Đánh dấu).
-- **Review:** mặc định “Chỉ câu sai” khi có câu sai; bằng chứng tô sáng ngay trong passage; nút “Hỏi AI Tutor” chỉ hiện ở câu sai/bỏ trống.
+- **Thứ tự:** Summary (loại điểm luôn có nhãn, thời gian làm) → Bước tiếp theo (**Làm lại câu sai** primary) → theo Part (TOEIC, kèm thời gian TB/câu) hoặc theo dạng câu (IELTS) → Phiếu trả lời / Answer key (lọc Sai/Bỏ trống/Đánh dấu) → Câu tốn thời gian nhất.
+- **Review:** theo nhóm câu; dải số câu; mặc định “Chỉ câu sai”; bằng chứng tô sáng + highlight/ghi chú của người học; transcript cho Listening; nút “Hỏi AI Tutor” chỉ ở câu sai/bỏ trống. Chi tiết: `exam_practice_spec.md` §11.
 - **Scale:** khối “Bước tiếp theo” nhận nhiều loại gợi ý (luyện kỹ năng, xem video bài giảng P3, giáo viên chấm lại P4) — luôn chỉ 1 primary.
 
 ### F8. AI Tutor · P1
@@ -611,28 +614,27 @@ Mỗi trang: **Mục tiêu → Bố cục Web / Mobile → Component chính → 
 - **Mobile:** large title “Chào Minh” + language/avatar; hero card; KPI 2×2; các card xếp dọc; tab bar 5 mục (tab hiện tại có pill accent-soft + icon pop).
 - **Người mới / khách:** hero “Bắt đầu với một bài 5 phút” (Pip `wave`) → sau bài đầu: hero gợi ý kỹ năng yếu nhất (Pip `happy`).
 
-#### `catalog` — Danh mục (P1)
-- **Bố cục:** banner track (tint theo kỳ thi, Pip `think` trên Web) → Tabs kỳ thi + Search → Tabs loại + ToggleGroup kỹ năng → (bộ riêng nếu có) → grid thẻ bài 3 cột.
-- **Thẻ bài:** dải tint màu kỹ năng (swatch) chứa icon tile lớn + chip loại → tiêu đề, mô tả 2 dòng → meta (phút, câu, độ khó) → footer: trạng thái khóa/ghi chú + CTA. Hover nhấc thẻ.
-- **Luồng:** bài ngắn → `exam` ngay; thi thử/bài cần tài khoản → `exam-intro`.
+#### `catalog` — Luyện đề (P1)
+- **Bố cục:** Tabs kỳ thi + Search → Tabs loại → thẻ “Tiếp tục” (nếu có bài dở) → **Đề thi thử đầy đủ** (grid 3 thẻ: section·phút, 200 câu, độ khó, “Đã làm 1× · tốt nhất 600”) → **Luyện theo Part** (7 tile có độ chính xác của bạn) hoặc **Dạng câu hỏi** IELTS (8 tile) → **Bài ngắn** → CTA tài liệu.
+- **Luồng:** đề/tile → `exam-intro`; bài ngắn → `exam` ngay. Chi tiết `exam_practice_spec.md` §3.
 
-#### `exam-intro` — Giới thiệu bài (P1)
-- **Web:** trái: header tint (chip, H2, mô tả, 3 thông số) → Cấu trúc đề → Quy tắc chế độ (icon tile warning cho mock, success cho practice); phải: card sticky “Sẵn sàng chưa?” với Pip `happy` + CTA. **Mobile:** CTA ở thanh sticky đáy.
+#### `exam-intro` — Thiết lập bài làm (P1)
+- **Web:** trái: header đề + cấu trúc theo section → Chọn cách làm (Thi thử / Luyện tập) → Chọn phần + Thời gian & hỗ trợ (luyện tập) hoặc Quy tắc phòng thi (thi thử) → Kiểm tra âm thanh → Lịch sử đề; phải: **Tóm tắt sticky** + CTA + Pip `happy`. **Mobile:** CTA sticky đáy. Chi tiết §4.
 
-#### `exam` — Làm bài (P1)
-- **Không linh vật, không entrance animation lặp** — chỉ motion phản hồi: `optPop` khi chọn, `reveal`/`shake` khi kiểm tra, audio play ring + waveform sống, timer pulse khi < 60s.
-- **Web:** exam bar (thoát, icon kỹ năng, tiêu đề, save status, timer, Lưu & thoát, Nộp) → split passage/question hoặc single → footer gợi ý phím tắt → navigator phải (✓/✕ ở practice).
-- **Mobile:** app bar gọn + progress `sm` → audio (nếu có) → Tabs Đoạn văn/Câu → nội dung → thanh Trước / n/N (mở BottomSheet) / Tiếp.
+#### `exam` — Phòng thi (P1)
+- **Không linh vật, không entrance animation lặp** — chỉ motion phản hồi: `optPop` khi chọn, `reveal`/`shake` khi kiểm tra, waveform sống, timer pulse ≤ 5′.
+- **TOEIC:** exam bar (stepper Listening → Reading, đồng hồ, công cụ, Nộp) → Part banner + Directions → audio bar → trang theo Part → footer; cột phải **phiếu trả lời**. **IELTS:** header thí sinh + “phút còn lại” + Ẩn → strip Part → chia đôi kéo được → thanh câu hỏi đáy với Review. Chi tiết `exam_practice_spec.md` §5–§9.
+- **Mobile:** header gọn + ⋯ → audio → Tabs văn bản/câu → thanh Trước / Phiếu (BottomSheet) / Tiếp.
 
 #### `writing` · `speaking` — IELTS (P2)
 - Writing: như F9; trạng thái chấm có Pip `think`; nhận xét có ring band + Pip `happy`. Speaking: như F10; xin quyền có Pip `think`; nút mic lớn có 2 vòng sóng lan; nhận xét có Pip `happy`.
 
 #### `results` — Kết quả (P1)
-- **Hero kết quả:** chip loại/lý do nộp → tiêu đề cảm xúc theo % (Xuất sắc / Làm tốt lắm / Đang tiến bộ / Khởi đầu tốt) → ring % + điểm (đếm lên) → Alert “ước tính, không chính thức” → Pip theo mood (cheer/happy/calm; chỉ Web — Mobile bỏ Pip để điểm số chiếm trọn chiều ngang). Confetti chỉ khi ≥ 60%.
-- **Web:** trái: hero, điểm theo phần, danh sách đáp án (Tabs lọc); phải: thẻ chuyển đổi khách, Bước tiếp theo (tint theo kỹ năng yếu), theo kỹ năng. **Mobile:** hero → chuyển đổi → bước tiếp theo → phần → kỹ năng → đáp án.
+- **Hero kết quả:** chip loại/lý do nộp/thời gian → tiêu đề cảm xúc theo % → ring % + điểm TOEIC (L/R) hoặc band IELTS (kèm quy đổi raw → /40) → Alert “ước tính” → Pip theo mood (chỉ Web). Confetti chỉ khi ≥ 60%.
+- **Web:** trái: hero, bảng theo Part (TOEIC, có TB giây/câu) hoặc theo dạng câu (IELTS), phiếu trả lời/answer key có lọc; phải: chuyển đổi khách, **Làm lại câu sai**, câu tốn thời gian nhất. Chi tiết §11.
 
 #### `review` — Xem lại (P1)
-- Web 2 cột: passage/transcript (bằng chứng tô sáng có animation `highlight` 1.2s) | câu hỏi + Verified block + Trước/Tiếp. Mobile: câu → bằng chứng → điều hướng. Switch “Chỉ câu sai”.
+- Theo nhóm câu: dải số câu → Web 2 cột (stimulus với bằng chứng + highlight/ghi chú của bạn, transcript | câu hỏi review + thời gian mỗi câu + Trước/Tiếp nhóm). Mobile: câu → stimulus → điều hướng. Switch “Chỉ câu sai”.
 
 #### `tutor` — AI Tutor (P1)
 - Web: danh sách hội thoại 248px | context card (đáp án + giải thích kiểm duyệt) → chat (tin mới `rise`, tin cũ không animate lại) → chip gợi ý → composer pill (focus ring). Mobile: một cột, không danh sách hội thoại.

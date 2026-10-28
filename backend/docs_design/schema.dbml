@@ -204,6 +204,11 @@ Enum stimulus_type {
   audio_image
 }
 
+Enum annotation_kind {
+  highlight [note: 'Learner-selected text range in a stimulus (IELTS on-computer tool; TOEIC practice only)']
+  note [note: 'Highlight + learner note text']
+}
+
 Enum exam_kind {
   full_mock [note: 'Full timed test, always mock mode']
   section_test [note: 'One section, e.g. TOEIC Reading Part 7']
@@ -831,7 +836,7 @@ Table exam_revisions {
   exam_id uuid [not null]
   revision_number integer [not null]
   status revision_status [not null, default: 'draft']
-  sections jsonb [not null, note: '[{key:"L", title, skill_area, time_limit_seconds, instructions, rules:{audio_replay:false}}]']
+  sections jsonb [not null, note: '[{key:"L", title, skill_area, time_limit_seconds, delivery:"audio_paced"|"timed", check_seconds:120, parts:[{key:"P1", title, directions, question_range:"1-6"}], rules:{audio_replay:false, annotations:false}}]']
   time_limit_seconds integer [note: 'Total limit for mock; NULL = untimed practice']
   question_count integer [not null, default: 0, note: 'Snapshot at publish (immutable) for catalog listing']
   max_points numeric(7,2) [not null, default: 0, note: 'Snapshot at publish']
@@ -932,8 +937,8 @@ Table attempts {
   exam_revision_id uuid [ref: > exam_revisions.id, note: 'Pinned revision. NULL only for system-composed adaptive practice (P2)']
   mode attempt_mode [not null]
   status attempt_status [not null, default: 'in_progress']
-  settings jsonb [not null, default: `'{}'::jsonb`, note: '{"timer":"on","instant_feedback":true}']
-  resume_state jsonb [not null, default: `'{}'::jsonb`, note: '{"section_key":"R","position":14,"audio_offset_ms":0}']
+  settings jsonb [not null, default: `'{}'::jsonb`, note: 'Chosen at setup, immutable after start. Practice: {"parts":["P5","P7"],"time_limit_seconds":900,"instant_check":true,"audio_replay":true,"transcript":true}. Mock: {} (rules come from the revision). Display prefs {"font":"lg","tone":"cream"} may change during the attempt']
+  resume_state jsonb [not null, default: `'{}'::jsonb`, note: '{"section_key":"R","page":7,"focus_position":104,"track":{"segment":3,"offset_ms":2000},"eliminated":{"<question_id>":["B"]},"split_pct":52}']
   started_at timestamptz [not null, default: `now()`]
   deadline_at timestamptz [note: 'Server-authoritative end for timed attempts']
   last_activity_at timestamptz [not null, default: `now()`]
@@ -958,7 +963,10 @@ Table attempts {
 [P1] One learner sitting = historical fact. Same engine for practice sets, section tests
 and full mocks (TOEIC and IELTS): exam differences live in revision sections/rules and
 the scoring policy, not in separate attempt systems. Guest attempts are ordinary attempts
-of a guest user. Exam-mode rules are enforced server-side (deadline, review lock).
+of a guest user. Exam-mode rules are enforced server-side (deadline, review lock, audio-paced
+Listening track, section order, IELTS check window). A practice attempt may serve a subset of
+the revision (settings.parts): attempt_responses then exist only for the served questions.
+"Redo mistakes" = new practice attempt on the same revision with the wrong questions only.
 '''
 }
 
@@ -991,6 +999,29 @@ NULL), so navigation, flags, resume and "unanswered" counts are trivial. Autosav
 UPDATE answer/last_saved_at (last write wins per question). max_points/position are
 copied on purpose: the row is the historical record of what was served.
 Objective grading writes is_correct/points_awarded here; subjective feedback lives in evaluations.
+'''
+}
+
+Table attempt_annotations {
+  id uuid [pk, default: `gen_random_uuid()`]
+  attempt_id uuid [not null, ref: > attempts.id]
+  question_group_id uuid [ref: > question_groups.id, note: 'Stimulus the range belongs to (passage, document, transcript)']
+  stimulus_part smallint [not null, default: 0, note: 'Index of the document inside a multi-document group (TOEIC Part 7 double/triple passages)']
+  kind annotation_kind [not null]
+  anchor jsonb [not null, note: '{"start":120,"end":168,"quote":"Rooftops in London…"} — character offsets in the rendered plain text of that stimulus version']
+  body text [note: 'Note text; NULL for plain highlights']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (attempt_id, question_group_id) [name: 'ix_attempt_annotations_attempt']
+  }
+
+  Note: '''
+[P1] Highlights and notes made while taking a test, shown again in review. Anchored to the
+exact stimulus version served (question_groups are versioned), so offsets stay valid.
+Allowed in IELTS (as on the real computer-delivered test) and in practice mode; TOEIC mock
+disables them (no writing in the test book). Private to the learner.
 '''
 }
 
@@ -1234,6 +1265,7 @@ TableGroup learning_records [color: #F59E0B] {
   learner_goals
   attempts
   attempt_responses
+  attempt_annotations
   evaluations
   attempt_scores
   learner_skill_stats

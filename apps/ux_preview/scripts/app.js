@@ -4,12 +4,12 @@ const initial = () => ({
   mode:'light', palette:'default', lang:'vi', langMenu:null, langSuggestDone:false,
   persona:'returning', tenant:'engrisk', screen:'landing', hist:[],
   states:{}, modal:null, sheet:null, toasts:[],
-  catalog:{track:'toeic',kind:'all',skill:null,q:''}, introExam:'toeic-mini-mock',
+  catalog:{track:'toeic',kind:'all',skill:null,q:''}, introExam:'toeic-test-01', setup:null, pPop:null, reviewEv:null,
   auth:{tab:'signin',convert:false,showPw:false,resetSent:false,email:'',emailInvalid:false},
   onb:{step:0,exam:null,level:null,target:null,minutes:null},
-  resume:{examId:'toeic-mini-mock',mode:'mock',qids:EXAMS['toeic-mini-mock'].qids.slice(),idx:5,answers:{q1:'A',q2:'C',q3:'A',q4:'C',q5:'D'},checked:{},flags:{q3:true},remaining:492,elapsed:0,save:'saved',audio:{q1:{s:'done',p:1},q2:{s:'done',p:1},g_l3:{s:'done',p:1}},mTab:'q'},
+  resume:resumeSeed(),
   exam:null, result:null, extraHistory:[], review:{idx:0,onlyWrong:true}, resultFilter:'all',
-  tutor:{ctx:'q6',myAnswer:'B',messages:null,typing:false,draft:'',opened:false,seen:0},
+  tutor:{ctx:'t101',myAnswer:'B',messages:null,typing:false,draft:'',opened:false,seen:0},
   writing:null, speaking:null,
   lib:{rightsOk:false,rights:'',materials:[
       {id:'m1',title:'Remote work trends.pdf',meta:['PDF · 2 trang · 184 KB','PDF · 2 pages · 184 KB'],rights:'personal_study_only',status:'ready'},
@@ -85,27 +85,34 @@ function overlays(){
   const dlg = (inner,{role='dialog',ic,color='accent'}={}) => `<div class="modal__backdrop" data-action="overlayClose"><div class="modal__dialog" role="${role}" aria-modal="true" aria-labelledby="dlg-title" data-stop="1"><div class="bottom-sheet__handle"></div>${ic?`<span class="modal__icon" style="background:var(--${color}-soft);color:var(--${color}-soft-foreground)">${icon(ic,18)}</span>`:''}${inner}</div></div>`;
   if (M){
     if (M.type==='submit'){
-      const E=S.exam, un=E.qids.map((id,i)=>[id,i]).filter(([id])=>E.answers[id]==null||E.answers[id]===''), fl=E.qids.filter(id=>E.flags[id]).length;
+      const E=S.exam, un=E.qids.filter(id=>isBlank(E.answers[id])), fl=E.qids.filter(id=>E.flags[id]);
+      const byPart=[...new Set(E.qids.map(id=>Q[id].part))].map(p=>{ const ids=E.qids.filter(id=>Q[id].part===p); return [p,ids.filter(id=>!isBlank(E.answers[id])).length,ids.length]; });
+      const jump = (ids,cls) => `<div class="row row--wrap gap-1">${ids.map(id=>{ const pi=E.pages.findIndex(pg=>pg.qids.includes(id)); return `<button type="button" class="qbtn ${cls}" style="min-width:40px;padding:0 6px" data-action="qJump" data-q="${id}" data-close="1" ${pageAllowed(E,pi)?'':'disabled'}>${numLabel(Q[id])}</button>`; }).join('')}</div>`;
+      const lateL = E.sections&&E.sec==='L';
       html+=dlg(`<div class="modal__heading" id="dlg-title">${T('Nộp bài?','Submit your answers?')}</div>
-        <div class="grid grid-3" style="gap:8px">${[[answeredCount(),T('Đã trả lời','Answered'),'accent'],[un.length,T('Bỏ trống','Blank'),''],[fl,T('Đánh dấu','Flagged'),'warning']].map(([n,l,c])=>`<div class="card card--secondary" style="padding:12px;gap:2px;align-items:center"><span class="text-2xl font-semibold tnum ${c?'text-'+c:''}">${n}</span><span class="text-xs text-muted">${l}</span></div>`).join('')}</div>
-        ${un.length?`<div class="col gap-2"><span class="text-xs text-muted">${T('Câu chưa trả lời — chọn để quay lại:','Unanswered — tap to go back:')}</span><div class="row row--wrap gap-1">${un.map(([id,i])=>`<button type="button" class="qbtn" style="width:40px" data-action="qGo" data-i="${i}" data-close="1" data-fk="jump:${i}">${i+1}</button>`).join('')}</div></div>`:''}
-        <div class="modal__body">${E.mode==='mock'?T('Sau khi nộp bạn không thể sửa đáp án. Câu bỏ trống tính là sai.','You can’t change answers after submitting. Blank answers count as wrong.'):T('Các câu chưa kiểm tra sẽ được chấm khi nộp.','Unchecked questions will be graded on submit.')}</div>
+        <div class="grid grid-3" style="gap:8px">${[[answeredCount(),T('Đã trả lời','Answered'),'accent'],[un.length,T('Bỏ trống','Blank'),''],[fl.length,T('Đánh dấu','Flagged'),'warning']].map(([n,l,c])=>`<div class="card card--secondary" style="padding:12px;gap:2px;align-items:center"><span class="text-2xl font-semibold tnum ${c?'text-'+c:''}">${n}</span><span class="text-xs text-muted">${l}</span></div>`).join('')}</div>
+        <div class="submit-parts">${byPart.map(([p,a,n])=>`<div class="row row--between text-sm"><span>${partLabel(p)}</span><span class="tnum ${a<n?'text-warning':'text-success'}">${a}/${n}</span></div>`).join('')}</div>
+        ${fl.length?`<div class="col gap-2"><span class="text-xs text-muted">${T('Câu đã đánh dấu:','Flagged:')}</span>${jump(fl,'is-flagged')}</div>`:''}
+        ${un.length?`<div class="col gap-2"><span class="text-xs text-muted">${T('Câu chưa trả lời — chọn để quay lại:','Unanswered — tap to go back:')}</span>${jump(un,'')}</div>`:''}
+        ${lateL?alertBox('warning',T('Bạn đang ở phần Listening','You are still in Listening'),T('Nộp bây giờ sẽ kết thúc cả bài, gồm phần Reading chưa làm.','Submitting now ends the whole test, including the unstarted Reading section.'),'',{flat:true}):''}
+        <div class="modal__body">${E.mode==='mock'?T('Sau khi nộp bạn không thể sửa đáp án. Câu bỏ trống tính là sai — không bị trừ điểm khi đoán.','You can’t change answers after submitting. Blanks count as wrong — guessing is never penalised.'):T('Các câu chưa kiểm tra sẽ được chấm khi nộp.','Unchecked questions will be graded on submit.')}</div>
         <div class="modal__footer">${btn(T('Làm tiếp','Keep going'),{v:'tertiary',action:'closeModal'})}${btn(T('Nộp bài','Submit'),{action:'confirmSubmit',ic:'paper-plane'})}</div>`,{ic:'paper-plane'});
     }
+    if (M.type==='section') html+=`<div class="modal__backdrop"><div class="modal__dialog" role="dialog" aria-labelledby="dlg-title" style="align-items:center;text-align:center">${tile('book-open','accent','lg')}<div class="modal__heading" id="dlg-title">${T('Phần Listening đã kết thúc','Listening has ended')}</div><div class="modal__body">${T('Phần Reading (Part 5–7) bắt đầu ngay, 75 phút. Bạn không thể quay lại phần Listening.','Reading (Parts 5–7) starts now, 75 minutes. You can’t return to Listening.')}</div>${btn(T('Bắt đầu Reading','Start Reading'),{action:'nextSection',iconR:'arrow-right'})}</div></div>`;
     if (M.type==='grading') html+=`<div class="modal__backdrop"><div class="modal__dialog" role="dialog" aria-labelledby="dlg-title" style="align-items:center;text-align:center;max-width:320px">${mascot({mood:'think',size:90})}<span class="spinner">${SPIN}</span><div class="modal__heading" id="dlg-title">${T('Đang chấm bài…','Grading…')}</div><div class="modal__body">${T('Chấm tự động theo đáp án đã kiểm duyệt.','Graded against verified answer keys.')}</div></div></div>`;
     if (M.type==='exit') html+=dlg(`<div class="modal__heading" id="dlg-title">${T('Lưu và thoát?','Save and exit?')}</div><div class="modal__body">${S.exam&&S.exam.mode==='mock'?T('Đáp án đã được lưu. <b style="color:var(--foreground)">Đồng hồ thi thử vẫn tiếp tục chạy</b> — quay lại trước khi hết giờ, nếu không bài sẽ tự nộp.','Your answers are saved. <b style="color:var(--foreground)">The mock-test timer keeps running</b> — come back before time runs out or it will auto-submit.'):T('Đáp án đã được lưu. Bài luyện tập được tạm dừng.','Your answers are saved. Practice is paused.')}</div><div class="modal__footer">${btn(T('Ở lại','Stay'),{v:'tertiary',action:'closeModal'})}${btn(T('Lưu & thoát','Save & exit'),{action:'confirmExit'})}</div>`,{ic:'bookmark',color:S.exam&&S.exam.mode==='mock'?'warning':'accent'});
     if (M.type==='writingSubmit'){ const wc=words(S.writing.text), target=S.writing.mobileMode==='intro'?50:250;
       html+=dlg(`<div class="modal__heading" id="dlg-title">${T('Nộp bài viết?','Submit your essay?')}</div>${wc<target?alertBox('warning',T(`Bài có ${wc} từ, dưới yêu cầu ${target} từ`,`${wc} words — below the ${target}-word minimum`),T('Bài thi thật sẽ bị trừ điểm Task Response. Bạn vẫn có thể nộp để nhận nhận xét.','The real exam would lower Task Response. You can still submit for feedback.'),'',{flat:true}):`<div class="modal__body">${wc} ${T('từ. AI sẽ chấm ước tính theo 4 tiêu chí.','words. AI will estimate a band on 4 criteria.')}</div>`}<div class="modal__footer">${btn(T('Viết tiếp','Keep writing'),{v:'tertiary',action:'closeModal'})}${btn(T('Nộp bài','Submit'),{action:'writingConfirm',ic:'paper-plane'})}</div>`,{ic:'pencil'}); }
     if (M.type==='delete') html+=dlg(`<div class="modal__heading" id="dlg-title">${T('Xóa tài khoản?','Delete account?')}</div><div class="modal__body">${T('Thông tin cá nhân, tài liệu và phương thức đăng nhập sẽ bị xóa. Kết quả học tập được ẩn danh hóa. Không thể hoàn tác.','Personal info, uploads and sign-in methods will be deleted. Learning results are anonymized. This can’t be undone.')}</div><div class="modal__footer">${btn(T('Hủy','Cancel'),{v:'tertiary',action:'closeModal'})}${btn(T('Xóa vĩnh viễn','Delete permanently'),{v:'danger',action:'confirmDelete'})}</div>`,{role:'alertdialog',ic:'trash-bin',color:'danger'});
   }
-  if (S.sheet==='qnav'&&S.exam) html+=`<div class="modal__backdrop" data-action="overlayClose"><div class="modal__dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-title" data-stop="1"><div class="bottom-sheet__handle"></div><div class="row row--between"><div class="modal__heading" id="dlg-title">${T('Câu hỏi','Questions')}</div><span class="text-sm text-muted tnum">${answeredCount()}/${S.exam.qids.length}</span></div>${qnav()}<div class="modal__footer">${btn(T('Đóng','Close'),{v:'tertiary',action:'closeModal'})}${btn(T('Nộp bài','Submit'),{action:'openSubmit',ic:'paper-plane'})}</div></div></div>`;
+  if (S.sheet==='qnav'&&S.exam) html+=`<div class="modal__backdrop" data-action="overlayClose"><div class="modal__dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-title" data-stop="1" style="max-height:80%;overflow:auto"><div class="bottom-sheet__handle"></div><div class="row row--between"><div class="modal__heading" id="dlg-title">${T('Phiếu trả lời','Answer sheet')}</div><span class="text-sm text-muted tnum">${answeredCount()}/${S.exam.qids.length}</span></div>${answerSheet()}<div class="modal__footer">${btn(T('Đóng','Close'),{v:'tertiary',action:'closeModal'})}${btn(T('Nộp bài','Submit'),{action:'openSubmit',ic:'paper-plane'})}</div></div></div>`;
   if (S.toasts.length) html+=`<div class="toast-region">${S.toasts.map(t=>`<div class="toast" role="status" data-id="${t.id}">${icon(t.color==='success'?'circle-check-fill':t.color==='warning'?'triangle-exclamation':'circle-info',16,t.color==='success'?'text-success':t.color==='warning'?'text-warning':'text-accent')}<div class="grow"><div class="font-medium">${t.title}</div>${t.desc?`<div class="text-xs text-muted">${t.desc}</div>`:''}</div>${t.undo&&S.lib.undo?`<button type="button" class="button button--secondary button--sm" data-undo="1">${T('Hoàn tác','Undo')}</button>`:''}</div>`).join('')}</div>`;
   return html;
 }
 
 /* ---------- Composition ---------- */
-const TITLES = () => ({catalog:T('Luyện tập','Practice'),'exam-intro':T('Chi tiết bài','Test details'),results:T('Kết quả','Results'),review:T('Xem lại đáp án','Review answers'),tutor:'AI Tutor',library:T('Tài liệu của tôi','My materials'),progress:T('Tiến độ','Progress'),profile:T('Tài khoản','Account'),org:T('Tổ chức','Organization')});
-const SUBS = () => ({catalog:T('Chọn một bài ngắn hoặc làm đề thi thử','Pick a quick set or a mock test'),tutor:T('Giải thích dựa trên đáp án đã kiểm duyệt','Explanations grounded in verified answers'),library:T('Tài liệu riêng tư → câu hỏi luyện tập riêng','Private material → personal practice'),progress:T('Xu hướng điểm, kỹ năng và lịch sử','Score trend, skills and history'),profile:T('Mục tiêu, giao diện, ngôn ngữ và tài khoản','Goals, appearance, language and account'),org:T('Trải nghiệm học viên trong tổ chức','Learner experience in an organization')});
+const TITLES = () => ({catalog:T('Luyện đề','Practice tests'),'exam-intro':T('Thiết lập bài làm','Test setup'),results:T('Kết quả','Results'),review:T('Xem lại đáp án','Review answers'),tutor:'AI Tutor',library:T('Tài liệu của tôi','My materials'),progress:T('Tiến độ','Progress'),profile:T('Tài khoản','Account'),org:T('Tổ chức','Organization')});
+const SUBS = () => ({catalog:T('Đề thi thử đầy đủ, luyện theo Part/dạng câu và bài ngắn','Full tests, part or question-type practice and quick sets'),'exam-intro':T('Chọn thi thử hoặc tự thiết lập buổi luyện','Take a mock or set up your own practice'),tutor:T('Giải thích dựa trên đáp án đã kiểm duyệt','Explanations grounded in verified answers'),library:T('Tài liệu riêng tư → câu hỏi luyện tập riêng','Private material → personal practice'),progress:T('Xu hướng điểm, kỹ năng và lịch sử','Score trend, skills and history'),profile:T('Mục tiêu, giao diện, ngôn ngữ và tài khoản','Goals, appearance, language and account'),org:T('Trải nghiệm học viên trong tổ chức','Learner experience in an organization')});
 const RENDER = {landing:rLanding,auth:rAuth,onboarding:rOnboarding,home:rHome,catalog:rCatalog,'exam-intro':rIntro,exam:rExam,writing:rWriting,speaking:rSpeaking,results:rResults,review:rReview,tutor:rTutor,library:rLibrary,progress:rProgress,profile:rProfile,org:rOrg};
 function screenHtml(){
   const scr=S.screen, def=SCREENS[scr], inner=RENDER[scr]();
@@ -119,7 +126,7 @@ function screenHtml(){
   }
   return desktopApp(scr,inner,scr==='home'?home:{title:titles[scr],sub:SUBS()[scr]});
 }
-const urlFor = () => { const d=SCREENS[S.screen]; return `/${S.lang}`+d.url.replace(':slug',S.introExam).replace(':id','att_7f3c').replace(':conversationId','conv_19a2').replace(':n',String((S.review.idx||0)+1)); };
+const urlFor = () => { const d=SCREENS[S.screen]; return `/${S.lang}`+d.url.replace(':slug',(S.setup&&S.setup.examId)||S.introExam).replace(':id','att_7f3c').replace(':conversationId','conv_19a2').replace(':n',String((S.review.idx||0)+1)); };
 function frameHtml(){
   if (S.screen==='design-system') return rDesignSystem();
   const style = S.tenant==='sunrise'?`style="--accent:${S.org.accent};--accent-foreground:var(--snow);--focus:${S.org.accent}"`:'';
@@ -140,12 +147,12 @@ function toolbarHtml(){
 function reviewHtml(){
   const def=SCREENS[S.screen], cur=viewState(S.screen);
   const groups = Object.entries(JOURNEYS).map(([j,n])=>`<div class="review__group"><h4>${j} · ${n}</h4>${Object.entries(SCREENS).filter(([,d])=>d.j===j).map(([id,d])=>`<button type="button" class="review__link" data-action="jump" data-to="${id}" data-fk="jump:${id}" ${S.screen===id?'aria-current="page"':''}><span class="truncate">${d.name}</span><span class="row gap-1 shrink-0"><code>${id}</code>${d.phase!=='—'?phase(d.phase):''}</span></button>`).join('')}</div>`).join('');
-  const demo = {exam:S.exam&&S.exam.mode==='mock'?btn('Tua đến 15 giây cuối',{v:'tertiary',size:'sm',ic:'stopwatch',action:'ff'}):'',speaking:btn('Đặt lại Speaking',{v:'tertiary',size:'sm',ic:'arrow-rotate-left',action:'spkReset'}),writing:btn('Đặt lại Writing',{v:'tertiary',size:'sm',ic:'arrow-rotate-left',action:'writingReset'}),library:btn('Đặt lại Tài liệu',{v:'tertiary',size:'sm',ic:'arrow-rotate-left',action:'libReset'}),org:btn('Đặt lại lời mời',{v:'tertiary',size:'sm',ic:'arrow-rotate-left',action:'invite',data:{v:'pending'}}),landing:btn('Hiện lại gợi ý ngôn ngữ',{v:'tertiary',size:'sm',ic:'globe',action:'resetLangSuggest'})}[S.screen]||'';
+  const demo = {exam:S.exam&&!S.exam.submitted?`<div class="row row--wrap gap-1">${S.exam.track?btn('Tua audio tới cuối phần nghe',{v:'tertiary',size:'sm',ic:'stopwatch',action:'ff'}):S.exam.remaining!=null?btn('Tua tới 15 giây cuối',{v:'tertiary',size:'sm',ic:'stopwatch',action:'ff'}):''}${btn('TOEIC thi thử',{v:'ghost',size:'sm',action:'demoStart',data:{id:'toeic-test-01',m:'mock'}})}${btn('TOEIC luyện tập',{v:'ghost',size:'sm',action:'demoStart',data:{id:'toeic-test-01',m:'practice'}})}${btn('IELTS Reading',{v:'ghost',size:'sm',action:'demoStart',data:{id:'ielts-r-test-01',m:'mock'}})}${btn('IELTS Listening',{v:'ghost',size:'sm',action:'demoStart',data:{id:'ielts-l-test-01',m:'mock'}})}</div>`:'',speaking:btn('Đặt lại Speaking',{v:'tertiary',size:'sm',ic:'arrow-rotate-left',action:'spkReset'}),writing:btn('Đặt lại Writing',{v:'tertiary',size:'sm',ic:'arrow-rotate-left',action:'writingReset'}),library:btn('Đặt lại Tài liệu',{v:'tertiary',size:'sm',ic:'arrow-rotate-left',action:'libReset'}),org:btn('Đặt lại lời mời',{v:'tertiary',size:'sm',ic:'arrow-rotate-left',action:'invite',data:{v:'pending'}}),landing:btn('Hiện lại gợi ý ngôn ngữ',{v:'tertiary',size:'sm',ic:'globe',action:'resetLangSuggest'}),results:`<div class="row row--wrap gap-1">${btn('Kết quả TOEIC',{v:'ghost',size:'sm',action:'demoResult',data:{id:'toeic-test-01'}})}${btn('Kết quả IELTS Reading',{v:'ghost',size:'sm',action:'demoResult',data:{id:'ielts-r-test-01'}})}${btn('Kết quả IELTS Listening',{v:'ghost',size:'sm',action:'demoResult',data:{id:'ielts-l-test-01'}})}</div>`}[S.screen]||'';
   return `<div class="review__head"><div class="row row--between"><div class="row gap-2"><span class="brand__mark" style="width:24px;height:24px;font-size:12px;border-radius:7px">E</span><span class="font-semibold">UX Preview</span></div>${chip('Prototype','warning',null,{size:'sm'})}</div><p class="text-xs text-muted">Theme = HeroUI Theme Builder presets · dữ liệu giả lập, không backend. Màn khớp <code>product_flow.md §E</code>, quy tắc ở <code>ux_spec.md</code>.</p></div>
     <div class="review__info" aria-live="polite"><div class="row row--between"><b>${def.name}</b>${def.phase!=='—'?phase(def.phase):''}</div><div><code>${esc(S.screen)}</code> · <span class="text-muted">${def.url}</span></div><div class="text-muted">${def.purpose}</div>
       ${def.data.length?`<div class="col gap-1"><span class="text-xs font-medium text-muted">Dữ liệu (schema.dbml)</span><div class="row row--wrap gap-1">${def.data.map(d=>`<span class="chip chip--default chip--sm" style="font-family:var(--font-mono);font-size:11px;background:var(--surface)">${d}</span>`).join('')}</div></div>`:''}
       ${def.states.length>1?`<div class="col gap-1"><span class="text-xs font-medium text-muted">Trạng thái màn hình</span>${tabs('Trạng thái',def.states.map(s=>[s,{default:'Mặc định',loading:'Tải',empty:'Trống',error:'Lỗi',quota:'Hết lượt'}[s]]),cur,'setState',{size:'sm'})}</div>`:''}${demo?`<div>${demo}</div>`:''}</div>
-    <nav aria-label="Danh sách màn hình">${groups}</nav><div style="padding:12px 16px 24px" class="text-xs text-muted">Phím tắt bài thi (Web): ${kbd('A')}–${kbd('D')} chọn, ${kbd('←')}${kbd('→')} chuyển câu, ${kbd('F')} đánh dấu.</div>`;
+    <nav aria-label="Danh sách màn hình">${groups}</nav><div style="padding:12px 16px 24px" class="text-xs text-muted">Phím tắt phòng thi (Web): ${kbd('A')}–${kbd('D')} chọn, ${kbd('←')}${kbd('→')} trang/câu, ${kbd('F')} đánh dấu, ${kbd('Space')} phát/dừng audio (luyện tập). Bôi đen văn bản để highlight/ghi chú.</div>`;
 }
 
 /* ---------- Render: scroll/focus preservation, theme, motion ---------- */
@@ -195,24 +202,33 @@ function render(screenChanged){
 function themeSwitch(fn){ document.body.classList.add('theming'); fn(); render(); setTimeout(()=>document.body.classList.remove('theming'),450); }
 
 /* ---------- Actions ---------- */
-function startExam(id){
+function startExam(id,cfg){
   const ex=EXAMS[id]; if(!ex) return;
   if (ex.screen==='writing'){ S.writing=null; go('writing'); return; }
   if (ex.screen==='speaking'){ S.speaking=null; go('speaking'); return; }
-  if (ex.tier==='registered'&&user().guest){ S.introExam=id; go('exam-intro'); return; }
-  S.exam=newAttempt(id); S.result=null; S.states.exam=null; go('exam');
+  if (ex.tier==='registered'&&user().guest){ S.setup=setupFor(id); S.introExam=id; go('exam-intro'); return; }
+  S.exam=newAttempt(id,cfg||{}); S.result=null; S.states.exam=null; S.pPop=null; go('exam');
 }
+/** Move focus to a question (switching page if allowed) and bring it into view */
+function focusQ(qid){
+  const E=S.exam, pi=E.pages.findIndex(p=>p.qids.includes(qid)); if(!pageAllowed(E,pi)) return;
+  E.focus=qid; const turned=pi!==E.page; if(turned){ E.page=pi; E.mTab='q'; E.showEv=null; } render(turned);
+  requestAnimationFrame(()=>{ const el=document.getElementById('gap-'+qid)||document.getElementById('tq-'+qid)||document.getElementById('iq-'+qid); if(!el) return; el.scrollIntoView({block:'nearest',behavior:'smooth'}); if(el.matches('input')) el.focus({preventScroll:true}); });
+}
+function assignHeading(qid,k){ const E=S.exam; Object.keys(E.answers).forEach(id=>{ if(id!==qid&&Q[id].set===Q[qid].set&&E.answers[id]===k) E.answers[id]=null; }); setAnswer(qid,k); }
 function setAnswer(qid,val){
   const E=S.exam; if(!E) return; E.answers[qid]=val; E.save='saving';
   const b=document.getElementById('save-badge'); if(b) b.innerHTML=saveBadge();
   clearTimeout(setAnswer.t); setAnswer.t=setTimeout(()=>{ if(!S.exam) return; S.exam.save='saved'; const b2=document.getElementById('save-badge'); if(b2) b2.innerHTML=saveBadge(); },600);
 }
 function submitExam(reason){
-  const E=S.exam; if(!E||E.submitted) return; E.submitted=true; S.modal={type:'grading'}; S.sheet=null; render();
+  const E=S.exam; if(!E||E.submitted) return; E.submitted=true; S.modal={type:'grading'}; S.sheet=null; S.pPop=null; render();
   setTimeout(()=>{
-    S.result=buildResult(E.examId,E.qids,E.answers,E.flags,E.mode,reason); S.modal=null;
+    const secs=Object.values(E.time).reduce((a,b)=>a+b,0)||E.elapsed;
+    S.result=buildResult(E.examId,E.qids,E.answers,E.flags,E.mode,reason,{time:E.time,hl:E.hl,notes:E.notes,cfg:{parts:E.parts,tools:E.tools},seconds:secs}); S.modal=null;
     if (S.resume&&S.resume.examId===E.examId) S.resume=null;
-    S.extraHistory.unshift({date:'today',exam:E.examId,mode:E.mode,status:'completed',score:S.result.total!=null?String(S.result.total):rawLabel(S.result),est:S.result.total!=null,mins:Math.max(1,Math.round((E.elapsed||((EXAMS[E.examId].seconds||0)-(E.remaining||0)))/60))});
+    const R=S.result;
+    S.extraHistory.unshift({date:'today',exam:E.examId,mode:E.mode,status:'completed',score:R.total!=null?String(R.total):R.band!=null&&E.mode==='mock'?'Band '+R.band.toFixed(1):rawLabel(R),est:R.total!=null||R.band!=null,mins:Math.max(1,Math.round(secs/60))});
     S.exam=null; S.resultFilter='all'; S.review={idx:0,onlyWrong:true};
     go('results');
     if (reason==='time_expired') toast(T('Hết giờ — bài đã được nộp tự động','Time’s up — submitted automatically'),T('Các câu đã trả lời được chấm bình thường.','Answered questions were graded as usual.'),'warning');
@@ -236,8 +252,8 @@ const A = {
   persona:d=>{personaApply(d.v); if(d.v==='guest'&&!['landing','catalog','exam','results','review','auth','exam-intro','design-system'].includes(S.screen)) S.screen='landing'; render(true);},
   tenantTb:d=>{ if(d.v==='sunrise'){ if(user().guest){toast(T('Khách không thuộc tổ chức nào','Guests don’t belong to organizations'),T('Chọn persona “Đã học” để xem.','Switch persona to “Đã học” to view.'),'warning');return;} S.org.invite='accepted'; } themeSwitch(()=>{S.tenant=d.v;}); },
   resetAll:()=>{ const keep={device:S.device,mode:S.mode,palette:S.palette,lang:S.lang}; S=initial(); Object.assign(S,keep); render(true); },
-  jump:d=>{ if(d.to==='exam'&&!S.exam) S.exam=S.resume&&S.persona==='returning'?JSON.parse(JSON.stringify(S.resume)):newAttempt('toeic-mini-mock'); go(d.to); },
-  go:d=>{ if(d.to==='exam'&&!S.exam) S.exam=newAttempt('toeic-mini-mock'); go(d.to); },
+  jump:d=>{ if(d.to==='exam'&&!S.exam) S.exam=S.resume&&S.persona==='returning'?JSON.parse(JSON.stringify(S.resume)):newAttempt('toeic-test-01'); if(d.to==='exam-intro'&&!S.setup) S.setup=setupFor(S.introExam); go(d.to); },
+  go:d=>{ if(d.to==='exam'&&!S.exam) S.exam=newAttempt('toeic-test-01'); go(d.to); },
   back:()=>{ let p=S.hist.pop(); while(p==='design-system') p=S.hist.pop(); S.screen=p||'home'; S.modal=null; render(true); },
   setState:d=>{ S.states[S.screen]=d.s==='default'?null:d.s; render(true); },
   noop:()=>toast(T('Chỉ minh họa','Illustration only'),T('Hành động này không được mô phỏng trong prototype.','This action isn’t simulated in the prototype.'),'info'),
@@ -257,29 +273,60 @@ const A = {
   track:d=>{S.catalog.track=d.v;S.catalog.skill=null;render(true);}, kind:d=>{S.catalog.kind=d.v;render();},
   skill:d=>{S.catalog.skill=S.catalog.skill===d.v?null:d.v;render();},
   resetFilters:()=>{S.catalog.kind='all';S.catalog.skill=null;S.catalog.q='';S.states.catalog=null;render();},
-  openExam:d=>{ const ex=EXAMS[d.id]; if(ex.kind==='full_mock'||(ex.tier==='registered'&&user().guest)){ S.introExam=d.id; go('exam-intro'); } else startExam(d.id); },
+  openExam:d=>{ const ex=EXAMS[d.id]; if(ex.screen){ startExam(d.id); return; } if(ex.kind==='full_mock'||(ex.tier==='registered'&&user().guest)){ S.setup=setupFor(d.id); S.introExam=d.id; go('exam-intro'); } else startExam(d.id); },
+  openSetup:d=>{ S.setup=setupFor(d.id,d.part); S.introExam=d.id; go('exam-intro'); },
   startExam:d=>startExam(d.id),
-  resume:()=>{ S.exam=JSON.parse(JSON.stringify(S.resume)); S.result=null; go('exam'); },
-  qGo:d=>{ S.exam.idx=+d.i; S.exam.mTab='q'; if(d.close){S.modal=null;} S.sheet=null; render(true); },
-  qPrev:()=>{ if(S.exam.idx>0){S.exam.idx--; S.exam.mTab='q'; render(true);} },
-  qNext:()=>{ if(S.exam.idx<S.exam.qids.length-1){S.exam.idx++; S.exam.mTab='q'; render(true);} },
-  flag:()=>{ const id=S.exam.qids[S.exam.idx]; S.exam.flags[id]=!S.exam.flags[id]; render(); },
-  check:()=>{ const id=S.exam.qids[S.exam.idx]; S.exam.checked[id]=true; S.justChecked=id; render(); },
+  suMode:d=>{ S.setup.mode=d.v; if(d.v==='practice'&&!S.setup.parts.length) S.setup.parts=examParts(EXAMS[S.setup.examId]); render(); },
+  suLimit:d=>{ S.setup.limit=d.v; render(); },
+  suTool:d=>{ S.setup[d.v]=!S.setup[d.v]; render(); },
+  suSample:()=>{ S.setup.sample=!S.setup.sample; render(); if(S.setup.sample) setTimeout(()=>{ if(S.setup&&S.setup.sample){ S.setup.sample=false; render(); } },2500); },
+  suStart:()=>{ const su=S.setup; startExam(su.examId, su.mode==='mock'?{mode:'mock'}:{mode:'practice',parts:su.parts,limit:setupMinutes(su),instant:su.instant,replay:su.replay,transcript:su.transcript}); },
+  demoStart:d=>startExam(d.id,{mode:d.m}),
+  demoResult:d=>{ S.result=buildResult(d.id,examQids(EXAMS[d.id]),CANNED[d.id]||{},{},'mock'); S.resultFilter='all'; render(true); },
+  resume:()=>{ S.exam=JSON.parse(JSON.stringify(S.resume)); S.result=null; S.pPop=null; go('exam'); },
+  pGo:d=>{ if(d.i===''||d.i==null) return; const E=S.exam, i=+d.i; if(!pageAllowed(E,i)) return; E.page=i; E.focus=E.pages[i].qids[0]; E.mTab='q'; E.showEv=null; S.pPop=null; render(true); },
+  qJump:d=>{ if(d.close) S.modal=null; S.sheet=null; focusQ(d.q); },
+  qStep:d=>{ const E=S.exam, i=E.qids.indexOf(E.focus)+(+d.d); if(i<0||i>=E.qids.length) return; focusQ(E.qids[i]); },
+  focusQ:d=>focusQ(d.q),
+  sheetMark:d=>{ setAnswer(d.q,d.k); S.exam.focus=d.q; S.just={q:d.q,k:d.k}; render(); },
+  flag:d=>{ const E=S.exam, id=d.q||E.focus; E.flags[id]=!E.flags[id]; render(); },
+  checkPage:()=>{ const E=S.exam, ids=curPage().qids.filter(id=>!isBlank(E.answers[id])&&!E.checked[id]); ids.forEach(id=>E.checked[id]=true); S.justChecked=ids; render(); },
+  strike:(d,el,ev)=>{ ev.preventDefault(); const E=S.exam, s=E.struck[d.q]=E.struck[d.q]||[], i=s.indexOf(d.k); if(i>=0) s.splice(i,1); else s.push(d.k); render(); },
   mTab:d=>{ S.exam.mTab=d.v; render(true); },
-  audioPlay:d=>{ const a=S.exam.audio[d.k]||{s:'idle',p:0}; if(a.s==='playing') return; if(a.s==='done'&&S.exam.mode==='mock') return; S.exam.audio[d.k]={s:'playing',p:0}; render(); },
-  openSubmit:()=>{ S.sheet=null; S.modal={type:'submit'}; render(); },
+  aToggle:()=>{ const E=S.exam, p=curPage(); if(!p.audio||E.mode==='mock') return; const a=E.audio[p.key]=E.audio[p.key]||{t:0,playing:false}; if(!a.playing&&a.t>=p.audio.sec){ if(!E.tools.replay) return; a.t=0; } a.playing=!a.playing; render(); },
+  aBack:()=>{ const p=curPage(), a=S.exam.audio[p.key]; if(a){ a.t=Math.max(0,a.t-5); render(); } },
+  aSpeed:d=>{ S.exam.speed=+d.v; render(); },
+  seek:d=>{ const E=S.exam, p=curPage(); if(E.mode==='mock'||!E.tools.replay) return; const a=E.audio[p.key]=E.audio[p.key]||{t:0,playing:false}; a.t=+d.t; a.playing=true; render(); },
+  scrub:(d,el,ev)=>{ const E=S.exam, p=curPage(); if(E.mode==='mock'||!E.tools.replay) return; const r=el.getBoundingClientRect(), a=E.audio[p.key]=E.audio[p.key]||{t:0,playing:false}; a.t=Math.max(0,Math.min(p.audio.sec,(ev.clientX-r.left)/r.width*p.audio.sec)); render(); },
+  followAudio:()=>{ const E=S.exam, seg=curSeg(E); if(seg){ E.page=seg.page; E.focus=E.pages[seg.page].qids[0]; render(true); } },
+  pPop:d=>{ S.pPop=S.pPop===d.v?null:d.v; render(); },
+  pFont:d=>{ S.exam.settings.font=d.v; render(); },
+  pTone:d=>{ S.exam.settings.tone=d.v; render(); },
+  tInstant:()=>{ S.exam.tools.instant=!S.exam.tools.instant; render(); },
+  tReplay:()=>{ S.exam.tools.replay=!S.exam.tools.replay; render(); },
+  tTranscript:()=>{ S.exam.tools.transcript=!S.exam.tools.transcript; render(); },
+  notesToggle:()=>{ S.exam.notesOpen=!S.exam.notesOpen; S.pPop=null; render(); },
+  noteDel:d=>{ const E=S.exam; E.notes=E.notes.filter(n=>n.id!==d.id); for(const k in E.hl) E.hl[k]=E.hl[k].replace(new RegExp(`<mark class="hl hl--note" data-note="${d.id}">([\\s\\S]*?)</mark>`),'$1'); render(); },
+  pHide:()=>{ S.exam.hidden=!S.exam.hidden; S.pPop=null; render(); },
+  pPause:()=>{ const E=S.exam; if(E.mode!=='practice') return; E.paused=!E.paused; for(const k in E.audio) E.audio[k].playing=false; S.pPop=null; render(); },
+  pickHeading:d=>{ const E=S.exam; E.pick=E.pick===d.v?null:d.v; render(); },
+  slotClick:d=>{ const E=S.exam; if(E.pick){ assignHeading(d.q,E.pick); E.pick=null; } else if(E.answers[d.q]) setAnswer(d.q,null); E.focus=d.q; render(); },
+  showEv:d=>{ if(S.screen==='review') S.reviewEv=d.q; else { S.exam.showEv=S.exam.showEv===d.q?null:d.q; if(isM()) S.exam.mTab='p'; } render(); },
+  nextSection:()=>{ const E=S.exam; S.modal=null; startSection(E,E.secIdx+1); render(true); },
+  redoWrong:()=>{ const R=S.result, ids=R.items.filter(i=>!i.ok).map(i=>i.qid); if(!ids.length) return; S.exam=newAttempt(R.examId,{mode:'practice',qids:ids,instant:true,replay:true,transcript:true}); S.result=null; go('exam'); },
+  openSheet:()=>{ S.sheet='qnav'; S.pPop=null; render(); },
+  openSubmit:()=>{ S.sheet=null; S.pPop=null; S.modal={type:'submit'}; render(); },
   confirmSubmit:()=>submitExam('learner'),
-  saveExit:()=>{ S.modal={type:'exit'}; render(); },
-  confirmExit:()=>{ const E=S.exam; if(E){ E.save='saved'; S.resume=JSON.parse(JSON.stringify(E)); } S.exam=null; go(S.persona==='guest'?'catalog':'home'); toast(T('Đã lưu bài làm','Progress saved'),T('Tiếp tục từ Trang chủ hoặc trên điện thoại.','Resume from Home or on your phone.')); },
-  openSheet:()=>{ S.sheet='qnav'; render(); },
+  saveExit:()=>{ S.pPop=null; S.modal={type:'exit'}; render(); },
+  confirmExit:()=>{ const E=S.exam; if(E){ E.save='saved'; E.paused=false; E.hidden=false; for(const k in E.audio) E.audio[k].playing=false; S.resume=JSON.parse(JSON.stringify(E)); } S.exam=null; go(S.persona==='guest'?'catalog':'home'); toast(T('Đã lưu bài làm','Progress saved'),T('Tiếp tục từ Trang chủ hoặc trên điện thoại.','Resume from Home or on your phone.')); },
   closeModal:()=>{ S.modal=null; S.sheet=null; render(); },
   overlayClose:(d,el,ev)=>{ if(ev.target===el){ S.modal=null; S.sheet=null; render(); } },
-  ff:()=>{ if(S.exam&&S.exam.mode==='mock'){ S.exam.remaining=15; render(); } },
-  resultFilter:d=>{S.resultFilter=d.v;render();},
-  openReview:d=>{ S.review.idx=+d.i; S.review.onlyWrong=!S.result.items[+d.i].ok?S.review.onlyWrong:false; go('review'); },
-  reviewGo:d=>{ if(d.i==='') return; S.review.idx=+d.i; render(true); },
+  ff:()=>{ const E=S.exam; if(!E) return; if(E.track){ const tr=E.track; tr.i=Math.max(0,tr.segs.length-1); tr.t=Math.max(0,tr.segs[tr.i].sec-3); } else if(E.remaining!=null) E.remaining=15; render(); },
+  resultFilter:d=>{ S.resultFilter=d.v; render(); },
+  openReview:d=>{ S.review.idx=+d.i; if(S.result.items[+d.i].ok) S.review.onlyWrong=false; go('review'); },
+  reviewGo:d=>{ if(d.i===''||d.i==null) return; S.review.idx=+d.i; render(true); },
   reviewWrong:()=>{ S.review.onlyWrong=!S.review.onlyWrong; render(); },
-  openHistory:d=>{ if(d.status!=='completed'){ S.introExam=d.exam; go('exam-intro'); return; } const ex=EXAMS[d.exam]; S.result=buildResult(d.exam,ex.qids,CANNED[d.exam]||{},{},ex.mode); S.resultFilter='all'; go('results'); },
+  openHistory:d=>{ if(d.status!=='completed'){ if(S.resume&&S.resume.examId===d.exam){ A.resume(); return; } S.setup=setupFor(d.exam); S.introExam=d.exam; go('exam-intro'); return; } const ex=EXAMS[d.exam]; S.result=buildResult(d.exam,examQids(ex),CANNED[d.exam]||{},{},ex.mode); S.resultFilter='all'; go('results'); },
   askTutor:d=>{ S.tutor={ctx:d.q,myAnswer:d.a,messages:null,typing:false,draft:'',opened:true,seen:0}; S.states.tutor=null; go('tutor'); },
   tutorAsk:d=>tutorSend(d.t,true),
   tutorSend:()=>{ const t=S.tutor.draft.trim(); if(t) tutorSend(t,false); },
@@ -338,11 +385,14 @@ function tutorSend(text,isChip){
     render(); const ct=document.querySelector('[data-scroll="content"]'); if(ct) ct.scrollTop=ct.scrollHeight; },1100);
 }
 
-/* ---------- Events ---------- */
+/* ---------- Events (generic delegation; test-player specifics live in player-events.js) ---------- */
 document.addEventListener('click',ev=>{
   const dsLink=ev.target.closest('[data-ds]'); if (dsLink){ ev.preventDefault(); const t=document.getElementById(dsLink.dataset.ds), vp=document.getElementById('viewport'); if(t) vp.scrollTo({top:vp.scrollTop+t.getBoundingClientRect().top-vp.getBoundingClientRect().top-16,behavior:'smooth'}); return; }
   if (ev.target.closest('.toast [data-undo]')){ A.undoRemove(); return; }
+  if (!ev.target.closest('.sel-menu')) hideSelMenu();
   if (S.langMenu && !ev.target.closest('[data-dropdown]')){ S.langMenu=null; render(); }
+  if (S.pPop && !ev.target.closest('[data-dropdown]')){ S.pPop=null; render(); }
+  trackFocus(ev.target);
   const el=ev.target.closest('[data-action]'); if(!el||el.disabled) return;
   const act=el.dataset.action; if(!act||!A[act]) return;
   if (act!=='overlayClose' && ev.target.closest('[data-stop]') && !el.closest('[data-stop]')) return;
@@ -350,21 +400,17 @@ document.addEventListener('click',ev=>{
 });
 document.addEventListener('keydown',ev=>{
   if ((ev.key==='Enter'||ev.key===' ')&&ev.target.matches('tr[data-action]')){ ev.preventDefault(); ev.target.click(); return; }
-  if (ev.key==='Escape'&&S.langMenu){ S.langMenu=null; render(); return; }
-  if (ev.key==='Escape'&&(S.modal||S.sheet)&&!(S.modal&&S.modal.type==='grading')){ S.modal=null; S.sheet=null; render(); return; }
+  if (ev.key==='Escape'&&(S.langMenu||S.pPop)){ S.langMenu=null; S.pPop=null; render(); return; }
+  if (ev.key==='Escape'&&(S.modal||S.sheet)&&!(S.modal&&['grading','section'].includes(S.modal.type))){ S.modal=null; S.sheet=null; render(); return; }
   if (ev.key==='Enter'&&ev.target.id==='tutor-input'){ A.tutorSend(); return; }
-  if (S.screen!=='exam'||!S.exam||S.modal||S.sheet||isM()) return;
-  const t=ev.target; if (t.matches('input[type=text],input:not([type]),textarea,select')||(t.matches('input[type=radio]')&&ev.key.startsWith('Arrow'))) return;
-  if (ev.metaKey||ev.ctrlKey||ev.altKey) return;
-  const E=S.exam, qid=E.qids[E.idx], q=Q[qid];
-  if (ev.key==='ArrowRight'){ ev.preventDefault(); A.qNext(); }
-  else if (ev.key==='ArrowLeft'){ ev.preventDefault(); A.qPrev(); }
-  else if (ev.key.toLowerCase()==='f'){ A.flag(); }
-  else if (/^[a-d]$/i.test(ev.key)&&q.options){ const o=q.options[ev.key.toUpperCase().charCodeAt(0)-65]; const locked=E.mode==='practice'&&E.checked[qid]; if(o&&!locked){ setAnswer(qid,o[0]); S.just={q:qid,k:o[0]}; if(document.activeElement) document.activeElement.blur(); render(); } }
+  playerKey(ev);
 });
 document.addEventListener('change',ev=>{
   const el=ev.target, k=el.dataset.input; if(!k) return;
-  if (k==='answer'){ setAnswer(el.dataset.q,el.value); S.just={q:el.dataset.q,k:el.value}; render(); }
+  if (playerChange(el,k)) return;
+  if (k==='suPart'){ const p=S.setup.parts, i=p.indexOf(el.dataset.v); if(el.checked&&i<0) p.push(el.dataset.v); if(!el.checked&&i>=0) p.splice(i,1); const order=examParts(EXAMS[S.setup.examId]); p.sort((a,b)=>order.indexOf(a)-order.indexOf(b)); render(); }
+  if (k==='suSection'){ const ps=el.dataset.v.split(','), su=S.setup; su.parts = el.checked ? [...new Set([...su.parts,...ps])] : su.parts.filter(p=>!ps.includes(p)); const order=examParts(EXAMS[su.examId]); su.parts.sort((a,b)=>order.indexOf(a)-order.indexOf(b)); render(); }
+  if (k==='suSoundOk'){ S.setup.soundOk=el.checked; render(); }
   if (k==='rights'){ S.lib.rights=el.value; render(); }
   if (k==='rightsOk'){ S.lib.rightsOk=el.checked; render(); }
 });
@@ -373,7 +419,7 @@ document.addEventListener('focusout',ev=>{
 });
 document.addEventListener('input',ev=>{
   const el=ev.target, k=el.dataset.input; if(!k) return;
-  if (k==='blank'){ setAnswer(el.dataset.q,el.value); const b=document.querySelector('[data-action="check"]'); if(b) b.disabled=!el.value.trim(); }
+  if (playerInput(el,k)) return;
   if (k==='writing'){ S.writing.text=el.value; const wc=words(el.value), target=S.writing.mobileMode==='intro'?50:250, c=document.getElementById('w-count'); if(c){ c.textContent=`${wc} / ${target} ${T('từ','words')}`; c.className=`tnum font-medium ${wc>=target?'text-success':'text-muted'}`; } }
   if (k==='tutorDraft') S.tutor.draft=el.value;
   if (k==='authEmail'){ S.auth.email=el.value; if(S.auth.emailInvalid&&/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(el.value.trim())){ S.auth.emailInvalid=false; render(); } }
@@ -381,26 +427,14 @@ document.addEventListener('input',ev=>{
 });
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{ if(S.mode==='system') render(); });
 
-/* ---------- Clocks ---------- */
+/* ---------- Clocks: writing & speaking (test-player clocks in player-events.js) ---------- */
 setInterval(()=>{
-  const E=S.exam;
-  if (E&&!E.submitted&&S.screen==='exam'){
-    if (E.mode==='mock'){ E.remaining--; if(E.remaining<=0){ E.remaining=0; submitExam('time_expired'); return; } } else E.elapsed++;
-    const t=document.getElementById('exam-timer');
-    if (t){ t.querySelector('span').textContent=fmt(E.mode==='mock'?E.remaining:E.elapsed); if(E.mode==='mock'){ t.classList.toggle('is-warn',E.remaining<=300&&E.remaining>60); t.classList.toggle('is-danger',E.remaining<=60); } }
-  } else if (E&&E.mode==='mock'&&!E.submitted) E.remaining=Math.max(0,E.remaining-1);
-  if (S.resume&&S.resume.mode==='mock'&&!(E&&E.examId===S.resume.examId)) S.resume.remaining=Math.max(0,S.resume.remaining-1);
   const W=S.writing; if (W&&S.screen==='writing'&&W.phase==='editing'&&(!isM()||W.mobileMode)){ W.remaining=Math.max(0,W.remaining-1); const t=document.getElementById('w-timer'); if(t) t.querySelector('span').textContent=fmt(W.remaining); }
   const P=S.speaking; if (P&&S.screen==='speaking'&&(P.phase==='prep'||P.phase==='recording')){ P.t++;
     if (P.phase==='prep'&&P.t>=60){ P.phase='recording'; P.t=0; render(); }
     else if (P.phase==='recording'&&P.t>=120){ P.phase='recorded'; render(); }
     else { const t=document.getElementById('spk-timer'); if(t) t.querySelector('span').textContent=fmt(P.phase==='prep'?60-P.t:P.t); const pr=document.getElementById('spk-prep'); if(pr&&P.phase==='prep') pr.innerHTML=progressBar(P.t,60,{label:T('Thời gian chuẩn bị','Preparation'),right:`${60-P.t}s`}); } }
 },1000);
-setInterval(()=>{
-  const E=S.exam; if(!E) return; let changed=false;
-  for (const k in E.audio){ const a=E.audio[k]; if(a.s==='playing'){ const dur=(G[k]&&G[k].audioSec)||(Q[k]&&Q[k].audioSec)||5; a.p=Math.min(1,a.p+0.2/dur); if(a.p>=1) a.s='done'; changed=true; } }
-  if (changed&&S.screen==='exam') render();
-},200);
 
 /* Boot: suggest the browser language but never switch automatically */
 render(true);

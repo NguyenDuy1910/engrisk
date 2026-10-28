@@ -14,12 +14,15 @@
     styles/components.css  HeroUI component styles (BEM names of @heroui/styles)
     styles/patterns.css    Engrisk patterns, mascot "Pip", motion system
     styles/layout.css      review chrome, device frames, app shells, page compositions
+    styles/player.css      test player (TOEIC answer sheet, IELTS computer-delivered layout), practice hub, results
     scripts/icons.js       Gravity UI icon data
     scripts/i18n.js        languages + T()/tx() helpers + Intl formatting
-    scripts/data.js        mock content, exams, screen registry, palettes
+    scripts/content-*.js   TOEIC / IELTS demo content with real numbering; content.js = registry + exam catalog
+    scripts/data.js        non-exam mock data, screen registry, palettes
     scripts/ui.js          component helpers, mascot, language & appearance pickers
+    scripts/player-*.js    test-player engine, TOEIC & IELTS layouts, player events + clocks
     scripts/screens-*.js   one render function per screen
-    scripts/app.js         state, shells, overlays, render loop, actions, events
+    scripts/app.js         state, shells, overlays, render loop, actions, generic events
   Companion docs: product_flow.md · ux_spec.md · backend/docs_design/schema.dbml
 -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -29,6 +32,7 @@
 <link rel="stylesheet" href="styles/components.css">
 <link rel="stylesheet" href="styles/patterns.css">
 <link rel="stylesheet" href="styles/layout.css">
+<link rel="stylesheet" href="styles/player.css">
 </head>
 <body>
 <div class="proto">
@@ -42,12 +46,21 @@
 <script src="scripts/icons.js"></script>
 <script src="scripts/i18n.js"></script>
 <script src="scripts/data.js"></script>
+<script src="scripts/content-toeic.js"></script>
+<script src="scripts/content-ielts.js"></script>
+<script src="scripts/content.js"></script>
 <script src="scripts/ui.js"></script>
+<script src="scripts/player-core.js"></script>
+<script src="scripts/player-toeic.js"></script>
+<script src="scripts/player-ielts.js"></script>
 <script src="scripts/screens-public.js"></script>
 <script src="scripts/screens-learn.js"></script>
-<script src="scripts/screens-exam.js"></script>
+<script src="scripts/screens-practice.js"></script>
+<script src="scripts/screens-results.js"></script>
+<script src="scripts/screens-writing-speaking.js"></script>
 <script src="scripts/screens-more.js"></script>
 <script src="scripts/screens-ds.js"></script>
 <script src="scripts/app.js"></script>
+<script src="scripts/player-events.js"></script>
 </body>
 </html>

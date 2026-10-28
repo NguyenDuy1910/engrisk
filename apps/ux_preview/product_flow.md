@@ -7,7 +7,8 @@
 > | `apps/ux_preview/product_flow.md` (tài liệu này) | Hành vi sản phẩm, hành trình, màn hình, quy tắc thi, AI, RBAC, roadmap |
 > | `apps/ux_preview/ux-preview.html` (+ `styles/*.css`, `scripts/*.js`) | Prototype tương tác (Web + Mobile, VI/EN, 5 theme preset) — mở trực tiếp bằng trình duyệt, không cần build |
 > | `apps/ux_preview/ux_spec.md` | Quy tắc đặt component, feature flow F1–F14, behavior chuẩn, khung mở rộng, journey map, heuristic review, kế hoạch usability test |
-> | `backend/docs_design/schema.dbml` | Mô hình dữ liệu PostgreSQL (33 bảng, 6 domain) |
+> | `apps/ux_preview/exam_practice_spec.md` | Thiết kế chi tiết luyện đề & phòng thi TOEIC/IELTS: thư viện đề, thiết lập, test player, công cụ, kết quả, xem lại |
+> | `backend/docs_design/schema.dbml` | Mô hình dữ liệu PostgreSQL (34 bảng, 6 domain) |
 >
 > Trạng thái: **đề xuất thiết kế để product review**, chưa phải cam kết triển khai. Nhãn giai đoạn `P1`…`P4` dùng thống nhất trong mọi file.
 
@@ -88,9 +89,9 @@ Nút **“Luyện nhanh 5 phút”** luôn có trên topbar Web (trừ `catalog`
 ### Khác biệt Web vs Mobile (không chỉ thu nhỏ)
 | Tình huống | Web (HeroUI React) | Mobile (HeroUI Native) |
 |---|---|---|
-| Reading có đoạn văn | Split view: đoạn văn trái, câu hỏi phải, navigator câu hỏi cột phải | Một cột; segmented “Đoạn văn / Câu n” |
-| Điều hướng câu | Lưới câu hỏi luôn hiển thị + phím tắt A–D, ←/→, F | Thanh dưới Trước / n/N / Tiếp; lưới câu trong bottom sheet |
-| Listening | Audio card trong vùng câu hỏi | Audio card cố định đầu màn hình (audio-first), nút play 56px |
+| Reading có đoạn văn | TOEIC: văn bản trái, câu hỏi phải, **phiếu trả lời** (bubble A–D) cột phải. IELTS: chia đôi kéo được (passage ↔ câu hỏi) + thanh câu hỏi theo Part ở đáy | Một cột; Tabs “Văn bản / Câu hỏi” |
+| Điều hướng câu | TOEIC: phiếu trả lời luôn hiển thị (tô đáp án trực tiếp được). IELTS: thanh Part + số câu, Review flag, mũi tên. Phím tắt A–D / T-F-N, ←/→, F, Space | TOEIC: Trước / Phiếu n/N (bottom sheet) / Tiếp. IELTS: thanh số câu cuộn ngang |
+| Listening | Thi thử: một bản ghi liên tục theo phần, tự chuyển trang theo audio, chỉ chỉnh âm lượng. Luyện tập: play/pause, lùi 5s, tốc độ, transcript đồng bộ | Thanh audio cố định đầu màn hình |
 | Dialog xác nhận | Modal giữa màn hình | Bottom sheet (HeroUI Native `BottomSheet`) |
 | IELTS Writing | Đề trái, editor lớn phải, timer + tự lưu | Gợi ý: viết toàn bài / luyện mở bài 10 phút / tiếp tục trên web |
 | IELTS Speaking | Hỗ trợ, nhưng không tối ưu | Trải nghiệm chính: nút micro lớn, quyền micro hệ thống |
@@ -255,13 +256,13 @@ Mã màn hình = `id` trong registry `SCREENS` của `ux-preview.html`. Trạng 
 | `auth` (P1) | Đăng nhập/đăng ký/chuyển đổi khách | Đăng nhập / Tạo tài khoản | Google, quên mật khẩu, tiếp tục là khách | — | `users`, `auth_identities`, `auth_sessions`, `auth_tokens`, `tenant_memberships`, `membership_roles` | Input 48px, font 16px (tránh zoom iOS) |
 | `onboarding` (P1) | Thu mục tiêu tối thiểu | Tiếp tục / Hoàn tất | Bỏ qua, Quay lại | Thang điểm theo kỳ thi | `learner_goals`, `exam_types.score_scale` | Thẻ lựa chọn ≥ 60px |
 | `home` (P1) | Một hành động tiếp theo | Tiếp tục / Bắt đầu (gợi ý) | Chọn bài khác, Luyện kỹ năng yếu | Attempt đang làm, gợi ý, mục tiêu, phút/tuần, kỹ năng | `attempts`, `learner_goals`, `learner_skill_stats`, `attempt_scores`, `exams` | Web: 2 cột; Mobile: xếp chồng theo ưu tiên |
-| `catalog` (P1) | Chọn bài | Bắt đầu / Xem đề | Lọc kỳ thi, loại, kỹ năng; tạo bài từ tài liệu | Exam + revision hiện hành, quyền truy cập | `exams`, `exam_revisions`, `exam_types`, `exam_licenses` (P4) | Web lưới 3 cột; Mobile 1 cột, tabs full-width |
-| `exam-intro` (P1) | Cấu trúc + quy tắc trước khi thi | Bắt đầu thi thử / Tiếp tục | Làm lại từ đầu, Tạo tài khoản (nếu khóa) | Sections, thời lượng, attempt đang làm | `exams`, `exam_revisions.sections`, `attempts` | Mobile: CTA sticky dưới |
-| `exam` (P1) | Làm bài Reading/Listening | Câu tiếp / Nộp bài | Đánh dấu, Kiểm tra (practice), Lưu & thoát, lưới câu | Câu hỏi đã ẩn đáp án, response, timer | `attempts`, `attempt_responses`, `exam_revision_items`, `questions`, `question_groups`, `content_assets` | Web split + navigator; Mobile 1 cột, sheet lưới câu, audio cố định |
+| `catalog` (P1) | Thư viện “Luyện đề” | Làm đề / Bắt đầu | Tab TOEIC/IELTS, lọc loại (đề đầy đủ / theo Part hoặc dạng câu / bài ngắn), tìm kiếm, tiếp tục bài dở | Đề + revision hiện hành, lịch sử & độ chính xác theo Part | `exams`, `exam_revisions.sections`, `attempts`, `learner_skill_stats`, `exam_licenses` (P4) | Web lưới 3–4 cột; Mobile 1–2 cột |
+| `exam-intro` (P1) | Thiết lập bài làm | Bắt đầu thi thử / Bắt đầu luyện / Tiếp tục | Chọn chế độ, chọn Part, giới hạn thời gian, hỗ trợ luyện tập, kiểm tra âm thanh, lịch sử đề | Sections + parts, thời lượng, attempt đang làm, lịch sử | `exam_revisions.sections`, `attempts(settings)`, `attempt_scores` | Web: cột tóm tắt sticky; Mobile: CTA sticky dưới |
+| `exam` (P1) | Phòng thi TOEIC (đề + phiếu trả lời) / IELTS trên máy tính | Tiếp / Nộp bài | Đánh dấu, loại trừ phương án, highlight & ghi chú, cỡ chữ/màu nền, ẩn màn hình, tạm dừng (practice), kiểm tra trang (practice) | Câu hỏi đã ẩn đáp án, response, timer theo phần, track audio | `attempts`, `attempt_responses`, `attempt_annotations`, `exam_revision_items`, `questions`, `question_groups`, `content_assets` | Web split + phiếu/thanh câu; Mobile 1 cột, Tabs văn bản/câu, bottom sheet phiếu |
 | `writing` (P2) | IELTS Writing | Nộp bài | Bài mẫu (demo), Viết lại, Hỏi AI | Đề, nội dung đã lưu, đánh giá | `attempts`, `attempt_responses`, `evaluations`, `ai_runs` | Mobile: chọn chế độ phù hợp màn hình nhỏ |
 | `speaking` (P2) | IELTS Speaking | Bắt đầu / Nộp để AI nhận xét | Từ chối quyền, Ghi lại, Bỏ chuẩn bị | Cue card, bản ghi, đánh giá | `attempt_responses.answer_asset_id`, `content_assets`, `evaluations`, `ai_runs` | Mobile là trải nghiệm chính |
-| `results` (P1) | Điểm, kỹ năng, bước tiếp theo | Luyện ngay (kỹ năng yếu) | Xem lại câu sai, lọc đáp án, Tạo tài khoản (khách) | Điểm theo loại, response đã chấm, kỹ năng | `attempts`, `attempt_scores`, `attempt_responses`, `question_skills`, `skills`, `learner_skill_stats` | Mobile: tóm tắt → bước tiếp → chi tiết |
-| `review` (P1) | Hiểu vì sao sai | Hỏi AI Tutor | Trước/Tiếp, Chỉ câu sai | Đáp án kiểm duyệt, giải thích, bằng chứng/transcript | `attempt_responses`, `questions` (answer_key, explanation), `question_groups` (transcript) | Web: đoạn văn trái + câu phải; câu độc lập: 1 cột |
+| `results` (P1) | Báo cáo điểm | Làm lại câu sai | Luyện Part/dạng câu yếu, phiếu trả lời / bảng đáp án, câu tốn thời gian, Tạo tài khoản (khách) | Điểm theo loại, theo Part hoặc dạng câu, thời gian mỗi câu | `attempts`, `attempt_scores`, `attempt_responses(time_spent_ms)`, `question_skills`, `skills` | Mobile: tóm tắt → bước tiếp → chi tiết |
+| `review` (P1) | Hiểu vì sao sai, theo nhóm câu | Hỏi AI Tutor | Dải số câu, Chỉ câu sai, Trước/Tiếp nhóm, Xem bằng chứng | Đáp án kiểm duyệt, giải thích, bằng chứng, transcript, highlight của người học | `attempt_responses`, `attempt_annotations`, `questions`, `question_groups` | Web: văn bản trái + câu phải; Mobile: câu trước, văn bản sau |
 | `tutor` (P1) | Giải thích & hỏi tiếp | Gửi | Chip gợi ý, đánh giá hữu ích, Bắt đầu luyện | Ngữ cảnh response, lịch sử hội thoại, hạn mức | `tutor_conversations`, `tutor_messages`, `ai_runs`, `tenant_entitlements` | Web: danh sách hội thoại trái; Mobile: chat toàn màn |
 | `library` (P3) | Tài liệu riêng → câu hỏi riêng | Tải lên / Tạo câu hỏi / Tạo bộ luyện riêng | Sửa, Duyệt, Từ chối, Xóa | Tài liệu, trạng thái xử lý, bản nháp | `content_assets`, `source_materials`, `ai_runs`, `question_groups`, `questions`, `exams`, `exam_revisions` | Web: danh sách trái, dropzone phải |
 | `progress` (P1) | Xu hướng & lịch sử | Luyện (theo kỹ năng) | Mở kết quả cũ, tiếp tục bài dở | Điểm theo thời gian, kỹ năng, attempts | `attempts`, `attempt_scores`, `learner_skill_stats`, `skills` | Web bảng; Mobile danh sách |
@@ -277,11 +278,13 @@ Mã màn hình = `id` trong registry `SCREENS` của `ux-preview.html`. Trạng 
 ### Chế độ
 | | Practice (`attempt_mode = practice`) | Mock (`attempt_mode = mock`) |
 |---|---|---|
-| Dùng cho | `practice_set`, `section_test` (tùy chọn), `personal_practice` | `full_mock`, `section_test` có giờ |
-| Phản hồi | Nút “Kiểm tra” từng câu → khóa câu + giải thích | Không có đến khi nộp |
-| Thời gian | Không giới hạn, đếm thời gian đã luyện, tạm dừng khi thoát | `deadline_at = started_at + time_limit` (máy chủ quyết định) |
-| Listening | Nghe lại, transcript sau khi kiểm tra | Mỗi audio phát **1 lần**, không tua; người học tự bấm phát (không autoplay — tiếp cận tốt hơn) |
-| TOEIC Part 2 | Hiện nội dung đáp án sau kiểm tra | Chỉ hiện (A)(B)(C) như đề thật |
+| Dùng cho | Bài ngắn, luyện theo Part/dạng câu (chọn tập con của đề), “Làm lại câu sai”, `personal_practice` | `full_mock` — toàn bộ đề, đúng thứ tự phần |
+| Thiết lập | Chọn Part, giới hạn thời gian (không giới hạn / theo nhịp đề / 15–45′), bật/tắt kiểm tra từng trang, nghe lại & tốc độ, transcript (`attempts.settings`) | Không tùy chỉnh; quy tắc lấy từ `exam_revisions.sections` |
+| Phản hồi | “Kiểm tra” theo trang (nhóm câu) → khóa câu + giải thích + bằng chứng | Không có đến khi nộp |
+| Thời gian | Đếm lên, hoặc đếm ngược nếu đặt giới hạn; **tạm dừng** được (dừng đồng hồ + audio) | `deadline_at` theo phần (máy chủ quyết định). TOEIC: Listening theo audio ~45′ → Reading 75′, không quay lại Listening. IELTS Reading 60′; Listening theo audio + 2′ kiểm tra |
+| Listening | Play/pause, lùi 5s, 0.75–1.25×, bấm dòng transcript để nghe lại | Một bản ghi liên tục, tự phát (như phòng thi), không tua; có thời gian đọc trước câu hỏi; chỉ chỉnh âm lượng |
+| TOEIC Part 1–2 | Phương án chỉ nghe; chữ hiện sau khi kiểm tra | Chỉ hiện (A)(B)(C)(D) như đề thật |
+| Highlight / ghi chú | Có (TOEIC và IELTS) | IELTS: có (như máy thi). TOEIC: không (không được viết lên đề) |
 | Thoát | Tạm dừng | Đồng hồ vẫn chạy; quá hạn → tự nộp |
 
 ### Quy tắc chung
@@ -390,11 +393,13 @@ Mã màn hình = `id` trong registry `SCREENS` của `ux-preview.html`. Trạng 
 | Quên mật khẩu | `auth` | INSERT `auth_tokens(password_reset)`; UPDATE `auth_identities.password_hash`; revoke `auth_sessions` |
 | Đặt mục tiêu | `onboarding`, `profile` | UPSERT `learner_goals` |
 | Xem catalog | `catalog` | SELECT `exams` ⋈ `exam_revisions` (current) theo tenant/visibility/`access_tier`, + `exam_licenses` (P4) |
-| Start exam | `exam-intro`/`catalog` → `exam` | INSERT `attempts(exam_revision_id, mode, deadline_at)`; INSERT N `attempt_responses` từ `exam_revision_items` |
-| Save answer / đánh dấu | `exam` | UPDATE `attempt_responses(answer, is_flagged, last_saved_at, time_spent_ms)`; UPDATE `attempts(resume_state, last_activity_at)` |
+| Start exam | `exam-intro` (thiết lập) / `catalog` (bài ngắn) → `exam` | INSERT `attempts(exam_revision_id, mode, settings, deadline_at)`; INSERT `attempt_responses` cho các câu được phục vụ (tập con nếu `settings.parts`) |
+| Save answer / đánh dấu / loại trừ | `exam` | UPDATE `attempt_responses(answer, is_flagged, last_saved_at, time_spent_ms)`; UPDATE `attempts(resume_state{page, track, eliminated}, last_activity_at)` |
+| Highlight / ghi chú | `exam`, `review` | INSERT/UPDATE/DELETE `attempt_annotations(kind, anchor, body)` |
 | Kiểm tra (practice) | `exam` | UPDATE `attempt_responses(is_correct, points_awarded, graded_at)`; trả `explanation` |
-| Save & exit / Resume | `exam`, `home` | `attempts.resume_state`; SELECT `ix_attempts_resume` |
+| Save & exit / Resume | `exam`, `home`, `catalog` | `attempts.resume_state`; SELECT `ix_attempts_resume` |
 | Submit attempt | `exam` | UPDATE `attempts(status, submitted_at, submit_reason)` |
+| Làm lại câu sai | `results` → `exam` | INSERT `attempts(mode=practice, same revision)` + `attempt_responses` chỉ cho câu sai |
 | Grade attempt (khách quan) | hệ thống | UPDATE `attempt_responses`; INSERT `attempt_scores(raw, scaled_estimate)`; UPSERT `learner_skill_stats`; `attempts.status = completed` |
 | Auto-submit hết giờ | hệ thống | `ix_attempts_deadline_sweep` → như Submit với `submit_reason = time_expired` |
 | Nộp Writing / Speaking (P2) | `writing`, `speaking` | `attempt_responses.answer {text}` / `answer_asset_id` → `content_assets(learner_response)`; INSERT `ai_runs`, `evaluations(pending → completed)`; INSERT `attempt_scores(ai_estimate)` |
@@ -519,7 +524,7 @@ Bộ theme và component chuẩn được trình bày trong prototype tại màn
 - Giao diện mặc định tiếng Việt; nếu ngôn ngữ trình duyệt là ngôn ngữ đã hỗ trợ khác, hiện banner đề xuất (không tự đổi). Lựa chọn lưu ở `users.locale` (khách: trên thiết bị), URL có tiền tố `/{locale}`. Nội dung đề luôn tiếng Anh; giải thích theo locale. Múi giờ theo thiết bị, mặc định `Asia/Ho_Chi_Minh`.
 - Theme preset + chế độ Sáng/Tối/Theo hệ thống lưu ở `users.preferences.theme = {palette, mode}`; trong tenant có branding, `--accent` của tenant ghi đè preset của người học.
 - Mock được phép tạm thoát nhưng đồng hồ vẫn chạy; không có “tạm dừng” trong mock.
-- Listening mock: người học tự bấm phát (không autoplay), mỗi audio 1 lần.
+- Listening mock phát như phòng thi: một bản ghi liên tục cho cả phần, tự phát sau khi bắt đầu, không tạm dừng/tua; kiểm tra âm thanh ở màn thiết lập trước khi bắt đầu. Practice cho phép play/pause, tua, đổi tốc độ.
 - Không có streak; nhắc học tối đa 1 lần/ngày, tắt được.
 - Mỗi user chỉ một mục tiêu active cho mỗi loại kỳ thi trong mỗi tenant.
 - Công cụ biên soạn nội dung (CMS) cho content_manager là ứng dụng nội bộ, chưa thiết kế trong prototype.
