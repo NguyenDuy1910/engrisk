@@ -1,0 +1,1977 @@
+{
+  "version": "2.0.0",
+  "darkMode": true,
+  "gridEnabling": false,
+  "currentViewName": null,
+  "defaultView": {
+    "detailLevel": "All",
+    "relationshipMode": "All",
+    "tablePositions": [
+      {
+        "name": "users",
+        "schemaName": "public",
+        "x": 350.51025390625,
+        "y": 12
+      },
+      {
+        "name": "auth_identities",
+        "schemaName": "public",
+        "x": 1009.12939453125,
+        "y": 53
+      },
+      {
+        "name": "auth_sessions",
+        "schemaName": "public",
+        "x": 1864.9638671875,
+        "y": 137
+      },
+      {
+        "name": "action_tokens",
+        "schemaName": "public",
+        "x": 1864.9638671875,
+        "y": 610
+      },
+      {
+        "name": "roles",
+        "schemaName": "public",
+        "x": 1009.12939453125,
+        "y": 483
+      },
+      {
+        "name": "permissions",
+        "schemaName": "public",
+        "x": 350.51025390625,
+        "y": 570
+      },
+      {
+        "name": "role_permissions",
+        "schemaName": "public",
+        "x": 1864.9638671875,
+        "y": 1168
+      },
+      {
+        "name": "role_assignments",
+        "schemaName": "public",
+        "x": 1864.9638671875,
+        "y": 1406
+      },
+      {
+        "name": "tenants",
+        "schemaName": "public",
+        "x": 350.51025390625,
+        "y": 808
+      },
+      {
+        "name": "tenant_memberships",
+        "schemaName": "public",
+        "x": 1009.12939453125,
+        "y": 818
+      },
+      {
+        "name": "tenant_entitlements",
+        "schemaName": "public",
+        "x": 1009.12939453125,
+        "y": 1184
+      },
+      {
+        "name": "media_assets",
+        "schemaName": "public",
+        "x": 1009.12939453125,
+        "y": 1487
+      },
+      {
+        "name": "source_materials",
+        "schemaName": "public",
+        "x": 1864.9638671875,
+        "y": 1740
+      },
+      {
+        "name": "exam_types",
+        "schemaName": "public",
+        "x": 350.51025390625,
+        "y": 1238
+      },
+      {
+        "name": "skills",
+        "schemaName": "public",
+        "x": 1009.12939453125,
+        "y": 2889
+      },
+      {
+        "name": "content_items",
+        "schemaName": "public",
+        "x": 1864.9638671875,
+        "y": 2331
+      },
+      {
+        "name": "content_item_versions",
+        "schemaName": "public",
+        "x": 2763.859375,
+        "y": 241
+      },
+      {
+        "name": "content_item_relations",
+        "schemaName": "public",
+        "x": 3559.0361328125,
+        "y": 263
+      },
+      {
+        "name": "content_version_assets",
+        "schemaName": "public",
+        "x": 3559.0361328125,
+        "y": 757
+      },
+      {
+        "name": "content_media_timelines",
+        "schemaName": "public",
+        "x": 2763.859375,
+        "y": 1279
+      },
+      {
+        "name": "content_answer_specs",
+        "schemaName": "public",
+        "x": 3559.0361328125,
+        "y": 1155
+      },
+      {
+        "name": "content_version_skills",
+        "schemaName": "public",
+        "x": 3559.0361328125,
+        "y": 1393
+      },
+      {
+        "name": "content_access_grants",
+        "schemaName": "public",
+        "x": 2763.859375,
+        "y": 1581
+      },
+      {
+        "name": "content_credits",
+        "schemaName": "public",
+        "x": 2763.859375,
+        "y": 2062
+      },
+      {
+        "name": "content_ratings",
+        "schemaName": "public",
+        "x": 3559.0361328125,
+        "y": 1567
+      },
+      {
+        "name": "content_reports",
+        "schemaName": "public",
+        "x": 4337.931640625,
+        "y": 116
+      },
+      {
+        "name": "content_imports",
+        "schemaName": "public",
+        "x": 3559.0361328125,
+        "y": 1987
+      },
+      {
+        "name": "content_submissions",
+        "schemaName": "public",
+        "x": 3559.0361328125,
+        "y": 2885
+      },
+      {
+        "name": "content_comments",
+        "schemaName": "public",
+        "x": 4337.931640625,
+        "y": 726
+      },
+      {
+        "name": "learning_goals",
+        "schemaName": "public",
+        "x": 1864.9638671875,
+        "y": 2953
+      },
+      {
+        "name": "attempts",
+        "schemaName": "public",
+        "x": 3559.0361328125,
+        "y": 3700
+      },
+      {
+        "name": "attempt_responses",
+        "schemaName": "public",
+        "x": 4337.931640625,
+        "y": 1476
+      },
+      {
+        "name": "attempt_annotations",
+        "schemaName": "public",
+        "x": 4337.931640625,
+        "y": 2130
+      },
+      {
+        "name": "evaluations",
+        "schemaName": "public",
+        "x": 4998.06884765625,
+        "y": 12
+      },
+      {
+        "name": "attempt_scores",
+        "schemaName": "public",
+        "x": 4337.931640625,
+        "y": 2464
+      },
+      {
+        "name": "ai_runs",
+        "schemaName": "public",
+        "x": 1864.9638671875,
+        "y": 3532
+      },
+      {
+        "name": "conversations",
+        "schemaName": "public",
+        "x": 4998.06884765625,
+        "y": 506
+      },
+      {
+        "name": "conversation_messages",
+        "schemaName": "public",
+        "x": 5581.59912109375,
+        "y": 12
+      },
+      {
+        "name": "jobs",
+        "schemaName": "public",
+        "x": 1009.12939453125,
+        "y": 2173
+      },
+      {
+        "name": "idempotency_keys",
+        "schemaName": "public",
+        "x": 12,
+        "y": 12
+      }
+    ],
+    "tableGroupCollapseStates": [],
+    "stickyNoteLayouts": [],
+    "referencePaths": [
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "user_id"
+        ],
+        "secondTableName": "auth_identities",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "user_id"
+        ],
+        "secondTableName": "auth_sessions",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "user_id"
+        ],
+        "secondTableName": "action_tokens",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "tenants",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "tenant_id"
+        ],
+        "secondTableName": "action_tokens",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "roles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "role_id"
+        ],
+        "secondTableName": "action_tokens",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "issued_by_user_id"
+        ],
+        "secondTableName": "action_tokens",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "consumed_by_user_id"
+        ],
+        "secondTableName": "action_tokens",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "tenants",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "tenant_id"
+        ],
+        "secondTableName": "roles",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "roles",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "role_id"
+        ],
+        "secondTableName": "role_permissions",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "permissions",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "permission_id"
+        ],
+        "secondTableName": "role_permissions",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "user_id"
+        ],
+        "secondTableName": "role_assignments",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "tenant_memberships",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "membership_id"
+        ],
+        "secondTableName": "role_assignments",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "granted_by_user_id"
+        ],
+        "secondTableName": "role_assignments",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "tenants",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "tenant_id"
+        ],
+        "secondTableName": "tenant_memberships",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "user_id"
+        ],
+        "secondTableName": "tenant_memberships",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "tenants",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "tenant_id"
+        ],
+        "secondTableName": "tenant_entitlements",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "tenants",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "tenant_id"
+        ],
+        "secondTableName": "media_assets",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "owner_user_id"
+        ],
+        "secondTableName": "media_assets",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "tenants",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "tenant_id"
+        ],
+        "secondTableName": "source_materials",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "exam_types",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "exam_type_id"
+        ],
+        "secondTableName": "skills",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "skills",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "parent_id"
+        ],
+        "secondTableName": "skills",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "tenants",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "tenant_id"
+        ],
+        "secondTableName": "content_items",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "exam_types",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "exam_type_id"
+        ],
+        "secondTableName": "content_items",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "created_by_user_id"
+        ],
+        "secondTableName": "content_items",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "ai_runs",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "ai_run_id"
+        ],
+        "secondTableName": "content_item_versions",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "published_by_user_id"
+        ],
+        "secondTableName": "content_item_versions",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "created_by_user_id"
+        ],
+        "secondTableName": "content_item_versions",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "content_items",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "child_item_id"
+        ],
+        "secondTableName": "content_item_relations",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "ai_runs",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "ai_run_id"
+        ],
+        "secondTableName": "content_media_timelines",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "content_item_versions",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "question_version_id"
+        ],
+        "secondTableName": "content_answer_specs",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "content_item_versions",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "content_version_id"
+        ],
+        "secondTableName": "content_version_skills",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "skills",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "skill_id"
+        ],
+        "secondTableName": "content_version_skills",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "content_items",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "item_id"
+        ],
+        "secondTableName": "content_access_grants",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "tenants",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "grantee_tenant_id"
+        ],
+        "secondTableName": "content_access_grants",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "granted_by_user_id"
+        ],
+        "secondTableName": "content_access_grants",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "content_items",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "item_id"
+        ],
+        "secondTableName": "content_credits",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "user_id"
+        ],
+        "secondTableName": "content_credits",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "content_items",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "item_id"
+        ],
+        "secondTableName": "content_ratings",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "tenants",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "tenant_id"
+        ],
+        "secondTableName": "content_reports",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "content_items",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "root_item_id"
+        ],
+        "secondTableName": "content_reports",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "content_item_versions",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "reported_version_id"
+        ],
+        "secondTableName": "content_reports",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "attempts",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "attempt_id"
+        ],
+        "secondTableName": "content_reports",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "resolved_by_user_id"
+        ],
+        "secondTableName": "content_reports",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "tenants",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "tenant_id"
+        ],
+        "secondTableName": "content_imports",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "exam_types",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "exam_type_id"
+        ],
+        "secondTableName": "content_imports",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "assigned_reviewer_user_id"
+        ],
+        "secondTableName": "content_submissions",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "content_submissions",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "appeal_of_submission_id"
+        ],
+        "secondTableName": "content_submissions",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "content_comments",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "parent_comment_id"
+        ],
+        "secondTableName": "content_comments",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "author_user_id"
+        ],
+        "secondTableName": "content_comments",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "ai_runs",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "ai_run_id"
+        ],
+        "secondTableName": "content_comments",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "resolved_by_user_id"
+        ],
+        "secondTableName": "content_comments",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "exam_types",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "exam_type_id"
+        ],
+        "secondTableName": "learning_goals",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "content_items",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "content_item_id"
+        ],
+        "secondTableName": "attempts",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "media_assets",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "served_manifest_asset_id"
+        ],
+        "secondTableName": "attempts",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "attempts",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "attempt_id"
+        ],
+        "secondTableName": "attempt_responses",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "content_item_versions",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "question_version_id"
+        ],
+        "secondTableName": "attempt_responses",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "media_assets",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "answer_asset_id"
+        ],
+        "secondTableName": "attempt_responses",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "attempts",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "attempt_id"
+        ],
+        "secondTableName": "attempt_annotations",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "content_item_versions",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "content_version_id"
+        ],
+        "secondTableName": "attempt_annotations",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "attempt_responses",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "attempt_response_id"
+        ],
+        "secondTableName": "evaluations",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "evaluator_user_id"
+        ],
+        "secondTableName": "evaluations",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "jobs",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "job_id"
+        ],
+        "secondTableName": "evaluations",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "ai_runs",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "ai_run_id"
+        ],
+        "secondTableName": "evaluations",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "attempts",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "attempt_id"
+        ],
+        "secondTableName": "attempt_scores",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "tenants",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "tenant_id"
+        ],
+        "secondTableName": "ai_runs",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "jobs",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "job_id"
+        ],
+        "secondTableName": "ai_runs",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "requested_by_user_id"
+        ],
+        "secondTableName": "ai_runs",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "attempts",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "attempt_id"
+        ],
+        "secondTableName": "conversations",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "attempt_responses",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "attempt_response_id"
+        ],
+        "secondTableName": "conversations",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "content_item_versions",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "content_version_id"
+        ],
+        "secondTableName": "conversations",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "ai_runs",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "ai_run_id"
+        ],
+        "secondTableName": "conversation_messages",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "tenants",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "tenant_id"
+        ],
+        "secondTableName": "jobs",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id"
+        ],
+        "firstTableName": "users",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "requested_by_user_id"
+        ],
+        "secondTableName": "jobs",
+        "secondSchemaName": "public",
+        "secondRelation": "*",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "role_id",
+          "role_scope"
+        ],
+        "firstTableName": "role_assignments",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id",
+          "scope"
+        ],
+        "secondTableName": "roles",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "role_id",
+          "role_scope"
+        ],
+        "firstTableName": "action_tokens",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id",
+          "scope"
+        ],
+        "secondTableName": "roles",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "role_id",
+          "role_scope"
+        ],
+        "firstTableName": "role_permissions",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id",
+          "scope"
+        ],
+        "secondTableName": "roles",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "permission_id",
+          "role_scope"
+        ],
+        "firstTableName": "role_permissions",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id",
+          "scope"
+        ],
+        "secondTableName": "permissions",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "active_tenant_id",
+          "user_id"
+        ],
+        "firstTableName": "auth_sessions",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "user_id"
+        ],
+        "secondTableName": "tenant_memberships",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id",
+          "logo_asset_id"
+        ],
+        "firstTableName": "tenants",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "id"
+        ],
+        "secondTableName": "media_assets",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "owner_user_id"
+        ],
+        "firstTableName": "source_materials",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "user_id"
+        ],
+        "secondTableName": "tenant_memberships",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "user_id"
+        ],
+        "firstTableName": "learning_goals",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "user_id"
+        ],
+        "secondTableName": "tenant_memberships",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "user_id"
+        ],
+        "firstTableName": "attempts",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "user_id"
+        ],
+        "secondTableName": "tenant_memberships",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "user_id"
+        ],
+        "firstTableName": "conversations",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "user_id"
+        ],
+        "secondTableName": "tenant_memberships",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "user_id"
+        ],
+        "firstTableName": "content_ratings",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "user_id"
+        ],
+        "secondTableName": "tenant_memberships",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "reporter_tenant_id",
+          "reporter_user_id"
+        ],
+        "firstTableName": "content_reports",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "user_id"
+        ],
+        "secondTableName": "tenant_memberships",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "owner_user_id"
+        ],
+        "firstTableName": "content_items",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "user_id"
+        ],
+        "secondTableName": "tenant_memberships",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "created_by_user_id"
+        ],
+        "firstTableName": "content_imports",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "user_id"
+        ],
+        "secondTableName": "tenant_memberships",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "submitter_user_id"
+        ],
+        "firstTableName": "content_submissions",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "user_id"
+        ],
+        "secondTableName": "tenant_memberships",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "item_id"
+        ],
+        "firstTableName": "content_item_versions",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "id"
+        ],
+        "secondTableName": "content_items",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "id",
+          "current_published_version_id"
+        ],
+        "firstTableName": "content_items",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "item_id",
+          "id"
+        ],
+        "secondTableName": "content_item_versions",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "item_id",
+          "based_on_version_id"
+        ],
+        "firstTableName": "content_item_versions",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "item_id",
+          "id"
+        ],
+        "secondTableName": "content_item_versions",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "parent_version_id"
+        ],
+        "firstTableName": "content_item_relations",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "id"
+        ],
+        "secondTableName": "content_item_versions",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "child_item_id",
+          "child_version_id"
+        ],
+        "firstTableName": "content_item_relations",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "item_id",
+          "id"
+        ],
+        "secondTableName": "content_item_versions",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "content_version_id"
+        ],
+        "firstTableName": "content_version_assets",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "id"
+        ],
+        "secondTableName": "content_item_versions",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "asset_id"
+        ],
+        "firstTableName": "content_version_assets",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "id"
+        ],
+        "secondTableName": "media_assets",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "content_version_asset_id"
+        ],
+        "firstTableName": "content_media_timelines",
+        "firstSchemaName": "public",
+        "firstRelation": "1",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "content_version_assets",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "source_material_id"
+        ],
+        "firstTableName": "content_item_versions",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "id"
+        ],
+        "secondTableName": "source_materials",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "asset_id"
+        ],
+        "firstTableName": "source_materials",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "id"
+        ],
+        "secondTableName": "media_assets",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "content_item_id",
+          "content_version_id"
+        ],
+        "firstTableName": "attempts",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "item_id",
+          "id"
+        ],
+        "secondTableName": "content_item_versions",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "item_id",
+          "content_version_id"
+        ],
+        "firstTableName": "content_ratings",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "item_id",
+          "id"
+        ],
+        "secondTableName": "content_item_versions",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "package_asset_id"
+        ],
+        "firstTableName": "content_imports",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "id"
+        ],
+        "secondTableName": "media_assets",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "report_asset_id"
+        ],
+        "firstTableName": "content_imports",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "id"
+        ],
+        "secondTableName": "media_assets",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "root_item_id"
+        ],
+        "firstTableName": "content_imports",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "id"
+        ],
+        "secondTableName": "content_items",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "root_version_id"
+        ],
+        "firstTableName": "content_imports",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "id"
+        ],
+        "secondTableName": "content_item_versions",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "root_item_id",
+          "root_version_id"
+        ],
+        "firstTableName": "content_imports",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "item_id",
+          "id"
+        ],
+        "secondTableName": "content_item_versions",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "item_id"
+        ],
+        "firstTableName": "content_submissions",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "id"
+        ],
+        "secondTableName": "content_items",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "item_id",
+          "content_version_id"
+        ],
+        "firstTableName": "content_submissions",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "item_id",
+          "id"
+        ],
+        "secondTableName": "content_item_versions",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "content_version_id"
+        ],
+        "firstTableName": "content_comments",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "id"
+        ],
+        "secondTableName": "content_item_versions",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "tenant_id",
+          "submission_id"
+        ],
+        "firstTableName": "content_comments",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "tenant_id",
+          "id"
+        ],
+        "secondTableName": "content_submissions",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      },
+      {
+        "firstFieldNames": [
+          "conversation_id"
+        ],
+        "firstTableName": "conversation_messages",
+        "firstSchemaName": "public",
+        "firstRelation": "*",
+        "secondFieldNames": [
+          "id"
+        ],
+        "secondTableName": "conversations",
+        "secondSchemaName": "public",
+        "secondRelation": "1",
+        "checkPoints": []
+      }
+    ]
+  },
+  "views": {}
+}
